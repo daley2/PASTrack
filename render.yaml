@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: LegalTrack
+    env: python
+    region: oregon
+    plan: starter
+
+    buildCommand: >
+      pip install -r requirements.txt &&
+      python manage.py migrate --noinput 2>&1 || true &&
+      python manage.py collectstatic --noinput 2>&1 || true
+
+    startCommand: gunicorn legaltrack.wsgi:application --bind 0.0.0.0:$PORT
+
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: legaltrack.settings
+      - key: PORT
+        value: "8000"
