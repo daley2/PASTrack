@@ -7,7 +7,6 @@ services:
 
     buildCommand: >
       pip install -r requirements.txt &&
-      python manage.py migrate --noinput 2>&1 || true &&
       python manage.py collectstatic --noinput 2>&1 || true
 
     startCommand: gunicorn legaltrack.wsgi:application --bind 0.0.0.0:$PORT

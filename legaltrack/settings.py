@@ -274,61 +274,40 @@ def _database_from_url(database_url: str) -> dict[str, object]:
     # first. Supabase hosts typically have both A and AAAA records; psycopg2 may
     # pick IPv6 and error with "Cannot assign requested address".
     #
-    # Force IPv4 resolution for serverless platforms (Vercel, Render, AWS Lambda).
-    # These platforms may have IPv6 routing issues with Supabase.
-    # sslmode=require does not verify hostnames, so this is safe.
-    #
-    # Detection strategy:
-    # - Vercel: VERCEL or VERCEL_ENV
-    # - Render: Check for /etc/hostname containing "render" or check common Render env vars
-    # - AWS Lambda: AWS_LAMBDA_FUNCTION_NAME
-    # - Railway: RAILWAY_ENVIRONMENT
-    # - Fallback: if not DEBUG (production), assume serverless
-    is_serverless = (
-        _truthy(os.environ.get("VERCEL"))
-        or bool(os.environ.get("VERCEL_ENV"))
-        or bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
-        or bool(os.environ.get("RAILWAY_ENVIRONMENT"))
-        or bool(os.environ.get("RENDER_SERVICE_NAME"))  # Render service identifier
-        or bool(os.environ.get("RENDER"))  # Generic Render flag
-        or (not DEBUG and not DOTENV_PATH.exists())  # Production without .env
-    )
+    # Force IPv4 resolution for production deployments to avoid Supabase IPv6 connection issues
+    # Production deployments automatically set is_serverless=True
+    is_serverless = not DEBUG
     
     if is_serverless:
         try:
             host_val = config.get("HOST")
             host = str(host_val or "").strip()
+            port_val = config.get("PORT")
+            port = int(str(port_val or 5432))
             
             # Only resolve if it looks like a hostname (not already an IP)
             if host and "." in host and not all(c.isdigit() or c == "." for c in host):
+                print(f"[DEBUG-IPv4] Attempting IPv4 resolution for {host}", file=sys.stderr)
                 try:
-                    # Use getaddrinfo with explicit AF_INET for IPv4-only resolution
-                    # This is more reliable than gethostbyname() on serverless platforms
+                    # Force IPv4-only resolution
                     addr_infos = socket.getaddrinfo(
                         host, 
-                        int(str(config.get("PORT") or 5432)),
-                        family=socket.AF_INET,  # Force IPv4
+                        port,
+                        family=socket.AF_INET,  # AF_INET = IPv4 only
                         type=socket.SOCK_STREAM
                     )
                     if addr_infos:
-                        ipv4_addr = addr_infos[0][4][0]  # Extract IP from first result
-                        if ipv4_addr and ":" not in ipv4_addr:  # Ensure it's IPv4, not IPv6
-                            config["HOST"] = ipv4_addr
-                            print(
-                                f"[INFO] Serverless mode: Resolved {host} -> {ipv4_addr}",
-                                file=sys.stderr,
-                            )
-                except (socket.gaierror, socket.error, IndexError, OSError, ValueError) as e:
+                        ipv4_addr = addr_infos[0][4][0]
+                        print(f"[DEBUG-IPv4] SUCCESS: {host} -> {ipv4_addr}", file=sys.stderr)
+                        config["HOST"] = ipv4_addr
+                except Exception as e:
                     print(
-                        f"[WARN] IPv4 resolution failed for {host}: {type(e).__name__}: {e}",
+                        f"[DEBUG-IPv4] FAILED: Could not resolve {host} to IPv4: {type(e).__name__}: {e}. "
+                        f"Will try hostname anyway (psycopg2 may attempt both IPv4/IPv6).",
                         file=sys.stderr,
                     )
-                    # Fallback: keep original hostname, psycopg2 will attempt resolution
         except Exception as e:
-            print(
-                f"[ERROR] Unexpected error in IPv4 resolution: {type(e).__name__}: {e}",
-                file=sys.stderr,
-            )
+            print(f"[DEBUG-IPv4] Unexpected error during IPv4 resolution: {e}", file=sys.stderr)
 
     return config
 
