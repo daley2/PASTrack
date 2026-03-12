@@ -282,15 +282,21 @@ def _database_from_url(database_url: str) -> dict[str, object]:
 
             host = str(host_val or "").strip()
             port = int(str(port_val or "5432"))
+            
+            # Only attempt resolution if it looks like a hostname, not an IP
             if host and not host.replace(".", "").isdigit():
-                infos = socket.getaddrinfo(host, port, family=socket.AF_INET, type=socket.SOCK_STREAM)
-                if infos:
-                    ipv4 = infos[0][4][0]
-                    if ipv4:
-                        config["HOST"] = ipv4
+                try:
+                    infos = socket.getaddrinfo(host, port, family=socket.AF_INET, type=socket.SOCK_STREAM)
+                    if infos:
+                        ipv4 = infos[0][4][0]
+                        if ipv4:
+                            config["HOST"] = ipv4
+                except socket.gaierror:
+                    # If resolution fails, just use the hostname as-is
+                    # Vercel/psycopg2 will handle it
+                    pass
         except Exception:
-            # If resolution fails, keep hostname; Django/psycopg2 will error with
-            # a clearer message.
+            # If anything goes wrong, keep original config
             pass
 
     return config
@@ -432,8 +438,11 @@ EMAIL_USE_SSL = False
 EMAIL_TIMEOUT = 10
 
 if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
-    # Use custom backend that handles SSL certificate issues on Windows
-    EMAIL_BACKEND = "core.email_backends.GmailEmailBackend"
+    # Use standard SMTP backend for production (Vercel), custom for Windows dev
+    if _is_vercel():
+        EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    else:
+        EMAIL_BACKEND = "core.email_backends.GmailEmailBackend"
 else:
     # Fallback to console for development
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
