@@ -9,4 +9,4 @@ django-cors-headers==4.9.0
 
 whitenoise==6.11.0
 argon2-cffi==25.1.0
-bcrypt==5.0.0
+bcrypt==5.0.0gunicorn==23.0.0
