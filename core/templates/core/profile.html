@@ -15,6 +15,10 @@
             <label>Role</label>
             <input value="{{ user.get_role_display }}" disabled />
         </div>
+        <div class="span-2">
+            <label>LGU Assigned</label>
+            <input value="{{ user.lgu_municipality|default:'—' }}" disabled />
+        </div>
     </div>
 
     <div class="row-end mt-12">

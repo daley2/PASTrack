@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Case, CaseDocument, CustomUser
+from .models import Case, CaseDocument, CaseNumber, CustomUser
 
 
 class Module2CaseWizardTests(TestCase):
@@ -264,16 +264,16 @@ class Module2CapitolWorkflowTests(TestCase):
         self.client.login(username=self.numberer.username, password="StrongPass123!")  # noqa: S106
         resp = self.client.post(
             reverse("mark_numbered", kwargs={"tracking_id": case.tracking_id}),
-            {"numbering_number": "CEB-NUM-0001"},
+            {"numbers": "1001"},
         )
         self.assertEqual(resp.status_code, 302)
         case.refresh_from_db()
         self.assertEqual(case.status, "for_release")
-        self.assertEqual(case.numbering_number, "CEB-NUM-0001")
+        self.assertTrue(CaseNumber.objects.filter(case=case, number=1001).exists())
 
         self.client.logout()
         self.client.login(username=self.releaser.username, password="StrongPass123!")  # noqa: S106
-        resp = self.client.post(reverse("release_case", kwargs={"tracking_id": case.tracking_id}))
+        resp = self.client.post(reverse("release_case", kwargs={"tracking_id": case.tracking_id}), {"release_confirm": "1"})
         self.assertEqual(resp.status_code, 302)
         case.refresh_from_db()
         self.assertEqual(case.status, "released")
@@ -286,6 +286,8 @@ class Module2CapitolWorkflowTests(TestCase):
             submitted_by=self.lgu,
             status="for_approval",
             lgu_submitted_at=timezone.now(),
+            assigned_to=self.examiner,
+            assigned_at=timezone.now(),
         )
 
         self.client.login(username=self.approver.username, password="StrongPass123!")  # noqa: S106
@@ -295,8 +297,9 @@ class Module2CapitolWorkflowTests(TestCase):
         )
         self.assertEqual(resp.status_code, 302)
         case.refresh_from_db()
-        self.assertEqual(case.status, "returned")
+        self.assertEqual(case.status, "in_review")
         self.assertEqual(case.return_reason, "Missing document")
+        self.assertEqual(case.assigned_to_id, self.examiner.id)
 
 
 class DocumentAccessTests(TestCase):
@@ -334,10 +337,10 @@ class DocumentAccessTests(TestCase):
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 302)
 
-        # Wrong LGU user: should 404
+        # Other LGU user in same municipality: should succeed
         self.client.login(username=self.lgu2.username, password="StrongPass123!")  # noqa: S106
         resp2 = self.client.get(url)
-        self.assertEqual(resp2.status_code, 404)
+        self.assertEqual(resp2.status_code, 200)
 
         # Owner LGU user: should succeed
         self.client.logout()
@@ -349,7 +352,7 @@ class DocumentAccessTests(TestCase):
         url = reverse("case_detail", kwargs={"tracking_id": self.case.tracking_id})
         self.client.login(username=self.lgu2.username, password="StrongPass123!")  # noqa: S106
         resp = self.client.get(url)
-        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(resp.status_code, 200)
 
 
 class SuperuserCreationTests(TestCase):

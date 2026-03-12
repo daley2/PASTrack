@@ -50,6 +50,14 @@
                 {{ form.position }}
                 {{ form.position.errors }}
             </div>
+            {% if form.lgu_municipality %}
+                <div class="span-2">
+                    <label for="{{ form.lgu_municipality.id_for_label }}">LGU Assigned</label>
+                    {{ form.lgu_municipality }}
+                    {{ form.lgu_municipality.errors }}
+                    {% if form.lgu_municipality.help_text %}<div class="muted mt-4 fs-92">{{ form.lgu_municipality.help_text }}</div>{% endif %}
+                </div>
+            {% endif %}
         </div>
 
         <div style="display:flex; gap:10px; margin-top:14px;">

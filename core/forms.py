@@ -64,15 +64,23 @@ class CaseDetailsForm(forms.ModelForm):
             "client_number",
             "client_email",
             "case_type",
+            "property_title_type",
         ]
         widgets: ClassVar[dict] = {
             "client_first_name": forms.TextInput(attrs={"placeholder": "First name"}),
             "client_last_name": forms.TextInput(attrs={"placeholder": "Last name"}),
             "client_middle_name": forms.TextInput(attrs={"placeholder": "Middle name"}),
             "client_suffix": forms.TextInput(attrs={"placeholder": "Suffix (optional)"}),
-            "client_number": forms.TextInput(attrs={"placeholder": "Client number"}),
+            "client_number": forms.TextInput(attrs={
+                "placeholder": "9XXXXXXXXX",
+                "inputmode": "numeric",
+                "autocomplete": "tel-national",
+                "pattern": "9\\d{9}",
+                "maxlength": "10",
+            }),
             "client_email": forms.EmailInput(attrs={"placeholder": "Client email"}),
             "case_type": forms.Select(),
+            "property_title_type": forms.Select(),
         }
 
     def clean(self):
@@ -84,6 +92,27 @@ class CaseDetailsForm(forms.ModelForm):
             self.add_error("client_last_name", "Last name is required.")
         if not (cleaned.get("case_type") or "").strip():
             self.add_error("case_type", "Type of case is required.")
+
+        raw_num = (cleaned.get("client_number") or "").strip()
+        if raw_num:
+            digits = "".join([c for c in raw_num if c.isdigit()])
+            # Accept: 9XXXXXXXXX, 09XXXXXXXXX, 63 9XXXXXXXXX, +63 9XXXXXXXXX
+            if digits.startswith("0") and len(digits) == 11:
+                digits = digits[1:]
+            if digits.startswith("63") and len(digits) == 12:
+                digits = digits[2:]
+            if len(digits) != 10 or not digits.startswith("9"):
+                self.add_error("client_number", "Enter a valid PH mobile number (10 digits starting with 9).")
+            else:
+                cleaned["client_number"] = f"+63{digits}"
+
+        case_type = (cleaned.get("case_type") or "").strip()
+        title_type = (cleaned.get("property_title_type") or "").strip()
+        if case_type in {"land_first_time", "transfer_ownership_tax_decl"}:
+            if title_type not in {"titled", "untitled"}:
+                self.add_error("property_title_type", "Please select whether the property is titled or untitled.")
+        else:
+            cleaned["property_title_type"] = ""
         return cleaned
 
 
@@ -180,7 +209,7 @@ class StaffAccountCreateForm(forms.ModelForm):
     )
 
     lgu_municipality = forms.ChoiceField(
-        required=False,
+        required=True,
         choices=CustomUser.LGU_MUNICIPALITY_CHOICES,
         widget=forms.Select(),
     )
@@ -202,14 +231,16 @@ class StaffAccountCreateForm(forms.ModelForm):
         cleaned = super().clean() or {}
         account_type = cleaned.get("account_type")
         capitol_role = cleaned.get("capitol_role")
-        lgu_municipality = cleaned.get("lgu_municipality")
+        lgu_municipality = (cleaned.get("lgu_municipality") or "").strip()
+
+        if not lgu_municipality:
+            raise ValidationError("Please select an LGU municipality assignment.")
 
         if account_type == "capitol":
             if not capitol_role:
                 raise ValidationError("Please select a Capitol position.")
         elif account_type == "lgu":
-            if not lgu_municipality:
-                raise ValidationError("Please select an LGU municipality.")
+            pass
         else:
             raise ValidationError("Invalid account type.")
 
@@ -220,12 +251,11 @@ class StaffAccountCreateForm(forms.ModelForm):
         cleaned = self.cleaned_data or {}
 
         account_type = cleaned.get("account_type")
+        user.lgu_municipality = str(cleaned.get("lgu_municipality") or "")
         if account_type == "capitol":
             user.role = str(cleaned.get("capitol_role") or "")
-            user.lgu_municipality = ""
         else:
             user.role = "lgu_admin"
-            user.lgu_municipality = str(cleaned.get("lgu_municipality") or "")
 
         # Keep legacy full_name populated for existing templates.
         first_name = (cleaned.get("first_name") or "").strip()
@@ -341,13 +371,33 @@ class AccountActivationForm(forms.Form):
 
 
 class StaffAccountUpdateForm(forms.ModelForm):
+    lgu_municipality = forms.ChoiceField(
+        required=True,
+        choices=CustomUser.LGU_MUNICIPALITY_CHOICES,
+        widget=forms.Select(),
+        help_text="Assigned LGU municipality (used for dashboard visibility).",
+    )
+
     class Meta:
         model = CustomUser
         fields: ClassVar[list[str]] = ["full_name", "designation", "position"]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        user: CustomUser = self.instance
+        self.initial["lgu_municipality"] = (getattr(user, "lgu_municipality", "") or "").strip()
+
     def clean_full_name(self):
         cleaned = self.cleaned_data or {}
         return (cleaned.get("full_name") or "").strip()
+
+    def save(self, commit=True):
+        user: CustomUser = super().save(commit=False)
+        if "lgu_municipality" in self.cleaned_data:
+            user.lgu_municipality = str(self.cleaned_data.get("lgu_municipality") or "")
+        if commit:
+            user.save()
+        return user
 
 
 class PublicCaseSearchForm(forms.Form):

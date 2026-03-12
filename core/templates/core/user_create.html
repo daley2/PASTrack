@@ -42,7 +42,13 @@
                 {{ form.capitol_role.errors }}
             </div>
             <div id="lgu-fields" class="span-2" style="display:none;">
-                <label for="{{ form.lgu_municipality.id_for_label }}">LGU Municipality</label>
+                <div class="msg info" style="margin:0;">
+                    LGU Admin accounts are created by choosing “LGU Admin” above.
+                </div>
+            </div>
+
+            <div class="span-2">
+                <label for="{{ form.lgu_municipality.id_for_label }}">LGU Assigned</label>
                 {{ form.lgu_municipality }}
                 {{ form.lgu_municipality.errors }}
             </div>

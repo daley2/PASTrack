@@ -154,8 +154,9 @@ class CustomUser(AbstractUser):
         verbose_name_plural = "Users"
 
     def generate_staff_id(self, role_prefix):
-        """Generate Staff ID: 25-CEB-0001"""
+        """Generate Staff ID: YY-CEB-0001"""
         from .models import CustomUser
+        yy = timezone.localtime(timezone.now()).strftime("%y")
         prefix_map = {
             "super_admin": "ADM",
             "lgu_admin": "LGU",
@@ -170,12 +171,10 @@ class CustomUser(AbstractUser):
             role=role_prefix
         ).order_by("id").last()
         seq = (last_user.id + 1) if last_user else 1
-        return f"25-{prefix}-{seq:04d}"
+        return f"{yy}-{prefix}-{seq:04d}"
 
     def generate_temp_password(self):
-        """Generate strong 12-char temp password"""
-        alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
-        return "".join(secrets.choice(alphabet) for _ in range(12))
+        return "123456"
 
     def issue_activation(self, *, request, temp_password: str, send_email: bool | None = None) -> str:
         """Issue a 1-hour activation link and record activation metadata.
@@ -401,7 +400,8 @@ class Case(TimestampedModel):
         ("for_numbering", "For Numbering"),
         ("for_release", "For Release"),
         ("released", "Released"),
-        ("returned", "Returned for Correction"),
+        ("client_correction", "Client Correction (30 days)"),
+        ("returned", "Returned (Legacy)"),
         ("withdrawn", "Withdrawn"),
     ]
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_received")
@@ -428,8 +428,17 @@ class Case(TimestampedModel):
 
     case_type = models.CharField(max_length=64, choices=CASE_TYPE_CHOICES, blank=True, default="")
 
-    # Manual numbering (Capitol Numberer)
-    numbering_number = models.CharField(max_length=40, blank=True, null=True, unique=True)
+    PROPERTY_TITLE_TYPE_CHOICES: ClassVar[list[tuple[str, str]]] = [
+        ("titled", "Titled Property"),
+        ("untitled", "Untitled Property"),
+    ]
+    property_title_type = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        choices=PROPERTY_TITLE_TYPE_CHOICES,
+        help_text="Required only for Land First Time and Transfer of Ownership cases.",
+    )
 
     # ---------- LGU who submitted ----------
     submitted_by = models.ForeignKey(
@@ -438,6 +447,9 @@ class Case(TimestampedModel):
         null=True,
         related_name="submitted_cases"
     )
+
+    # LGU metadata
+    lgu_area_code = models.CharField(max_length=12, blank=True, default="")
 
     # ---------- Checklist (JSON) ----------
     checklist = models.JSONField(
@@ -468,6 +480,7 @@ class Case(TimestampedModel):
     )
     returned_at = models.DateTimeField(null=True, blank=True)
     return_reason = models.TextField(blank=True)
+    client_correction_deadline = models.DateTimeField(null=True, blank=True)
 
     # ---------- Assignment (Module 3.1) ----------
     assigned_to = models.ForeignKey(
@@ -645,6 +658,22 @@ class CaseDocument(TimestampedModel):
     def __str__(self):
         key = self.case.tracking_id or str(getattr(self.case, "draft_id", ""))
         return f"{key} - {self.doc_type}"
+
+
+class CaseNumber(TimestampedModel):
+    case = models.ForeignKey("Case", on_delete=models.CASCADE, related_name="numbers")
+    number = models.PositiveIntegerField(unique=True)
+
+    class Meta:
+        ordering: ClassVar[list[str]] = ["number"]
+        indexes: ClassVar[list] = [
+            models.Index(fields=["number"]),
+            models.Index(fields=["case"]),
+        ]
+
+    def __str__(self):
+        key = self.case.tracking_id or str(getattr(self.case, "draft_id", ""))
+        return f"{key} - {self.number}"
 
 
 class CaseRemark(TimestampedModel):

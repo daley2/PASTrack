@@ -28,10 +28,21 @@
                 <tr><td class="muted"><strong>Client Number</strong></td><td>{{ case.client_number|default:"—" }}</td></tr>
                 <tr><td class="muted"><strong>Client Email</strong></td><td>{{ case.client_email|default:"—" }}</td></tr>
                 <tr><td class="muted"><strong>Type of Case</strong></td><td>{{ case.get_case_type_display|default:"—" }}</td></tr>
-                {% if case.numbering_number %}
-                    <tr><td class="muted"><strong>Number</strong></td><td>{{ case.numbering_number }}</td></tr>
+                {% if case.case_type == "land_first_time" or case.case_type == "transfer_ownership_tax_decl" %}
+                    <tr><td class="muted"><strong>Property Title Type</strong></td><td>{{ case.get_property_title_type_display|default:"—" }}</td></tr>
+                {% endif %}
+                {% if case_numbers %}
+                    <tr>
+                        <td class="muted"><strong>Numbers</strong></td>
+                        <td>
+                            {% for n in case_numbers %}
+                                <span class="pagepill" style="margin-right:6px;">{{ n }}</span>
+                            {% endfor %}
+                        </td>
+                    </tr>
                 {% endif %}
                 <tr><td class="muted"><strong>Submitted by</strong></td><td>{{ case.submitted_by|default:"—" }}</td></tr>
+                <tr><td class="muted"><strong>LGU Area Code</strong></td><td>{{ case.lgu_area_code|default:"—" }}</td></tr>
                 <tr><td class="muted"><strong>Created</strong></td><td>{{ case.created_at|date:"M d, Y H:i" }}</td></tr>
                 {% if case.received_at %}
                     <tr><td class="muted"><strong>Received</strong></td><td>{{ case.received_at|date:"M d, Y H:i" }}{% if case.received_by %} (by {{ case.received_by.full_name }}){% endif %}</td></tr>
@@ -46,10 +57,17 @@
 
 {% if case.return_reason and case.returned_at %}
     <div class="card">
-        <h3 class="m-0" style="margin-bottom:8px;">Returned for Correction</h3>
+        {% if case.status == "client_correction" %}
+            <h3 class="m-0" style="margin-bottom:8px;">Client Correction Window</h3>
+        {% else %}
+            <h3 class="m-0" style="margin-bottom:8px;">Returned for Correction</h3>
+        {% endif %}
         <p class="m-0"><strong>Reason:</strong> {{ case.return_reason }}</p>
         {% if case.returned_at %}
             <p class="muted" style="margin:8px 0 0 0;">Returned: {{ case.returned_at|date:"M d, Y H:i" }}</p>
+        {% endif %}
+        {% if case.status == "client_correction" and case.client_correction_deadline %}
+            <p class="muted" style="margin:6px 0 0 0;">Deadline: {{ case.client_correction_deadline|date:"M d, Y H:i" }}</p>
         {% endif %}
     </div>
 {% endif %}
@@ -133,7 +151,7 @@
         <label for="id_reason">Return Reason</label>
         <textarea id="id_reason" name="reason" rows="3" placeholder="State what needs correction..."></textarea>
         <div style="display:flex; justify-content:flex-end; margin-top:12px;">
-            <button class="btn btn-danger" type="submit">Return to LGU</button>
+            <button class="btn btn-danger" type="submit">Return to Client (30 days)</button>
         </div>
     </form>
 {% endif %}
@@ -158,45 +176,47 @@
     </form>
 {% endif %}
 
-{% if can_remark %}
-    <form method="post" action="{% url 'add_case_remark' case.tracking_id %}" class="card">
-        {% csrf_token %}
-        <strong>Internal Remarks</strong>
-        <div class="muted" style="margin:6px 0 10px 0;">Visible to Capitol staff.</div>
-        {{ remark_form.text.label_tag }}
-        {{ remark_form.text }}
-        <div style="display:flex; justify-content:flex-end; margin-top:12px;">
-            <button class="btn btn-primary" type="submit">Add Remark</button>
-        </div>
-    </form>
-{% endif %}
+{% if show_internal %}
+    {% if can_remark %}
+        <form method="post" action="{% url 'add_case_remark' case.tracking_id %}" class="card">
+            {% csrf_token %}
+            <strong>Internal Remarks</strong>
+            <div class="muted" style="margin:6px 0 10px 0;">Visible to the current responsible actor.</div>
+            {{ remark_form.text.label_tag }}
+            {{ remark_form.text }}
+            <div style="display:flex; justify-content:flex-end; margin-top:12px;">
+                <button class="btn btn-primary" type="submit">Add Remark</button>
+            </div>
+        </form>
+    {% endif %}
 
-{% if remarks %}
-    <div class="card card--flat">
-        <div class="card__header">
-            <strong>Remarks</strong>
-        </div>
-        <div class="card__body" style="padding:0;">
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Remark</th>
-                        <th style="width:22%">By</th>
-                        <th style="width:22%">When</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for r in remarks %}
+    {% if remarks %}
+        <div class="card card--flat">
+            <div class="card__header">
+                <strong>Remarks</strong>
+            </div>
+            <div class="card__body" style="padding:0;">
+                <table class="table">
+                    <thead>
                         <tr>
-                            <td>{{ r.text|linebreaksbr }}</td>
-                            <td class="muted">{{ r.created_by|default:"—" }}</td>
-                            <td class="muted">{{ r.created_at|date:"M d, Y H:i" }}</td>
+                            <th>Remark</th>
+                            <th style="width:22%">By</th>
+                            <th style="width:22%">When</th>
                         </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        {% for r in remarks %}
+                            <tr>
+                                <td>{{ r.text|linebreaksbr }}</td>
+                                <td class="muted">{{ r.created_by|default:"—" }}</td>
+                                <td class="muted">{{ r.created_at|date:"M d, Y H:i" }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
-    </div>
+    {% endif %}
 {% endif %}
 
 {# Case history moved to the bottom so action controls appear above it #}
@@ -242,7 +262,7 @@
         <label for="id_approver_reason">Return Reason</label>
         <textarea id="id_approver_reason" name="reason" rows="3" placeholder="State what needs correction..."></textarea>
         <div style="display:flex; justify-content:flex-end; margin-top:12px;">
-            <button class="btn btn-danger" type="submit">Return for Correction</button>
+            <button class="btn btn-danger" type="submit">Return to Examiner</button>
         </div>
     </form>
 {% endif %}
@@ -250,11 +270,31 @@
 {% if can_number %}
     <form method="post" action="{% url 'mark_numbered' case.tracking_id %}" class="card">
         {% csrf_token %}
-        <label for="id_numbering_number">Number</label>
-        <input id="id_numbering_number" name="numbering_number" value="{{ case.numbering_number|default:'' }}" placeholder="Enter number" />
+        <strong>Numbering</strong>
+        <div class="muted" style="margin:6px 0 10px 0;">
+            Last used: <strong>{{ last_used_number|default:"—" }}</strong>. Suggested next: <strong>{{ suggested_next_number }}</strong>.
+            Enter one or more numbers (comma/space separated).
+        </div>
+
+        {% if case_numbers %}
+            <div class="msg info" style="margin-bottom:12px;">
+                <strong>Existing numbers</strong>
+                <div class="muted mt-4 fs-92">Check to remove on submit.</div>
+                <div class="row" style="margin-top:8px; gap:10px;">
+                    {% for n in case_numbers %}
+                        <label style="display:flex; align-items:center; gap:8px; margin:0;">
+                            <input type="checkbox" name="remove_numbers" value="{{ n }}" style="width:auto;" />
+                            <span>{{ n }}</span>
+                        </label>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+
+        <label for="id_numbers">Add numbers</label>
+        <textarea id="id_numbers" name="numbers" rows="2" placeholder="e.g. {{ suggested_next_number }}, {{ suggested_next_number|add:'1' }}">{{ suggested_next_number }}</textarea>
         <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:12px;">
             <div>
-                <strong>Numbering</strong>
                 <div class="muted">Move this case to For Release.</div>
             </div>
             <button class="btn btn-primary" type="submit">Mark as Numbered</button>
@@ -265,6 +305,13 @@
 {% if can_release %}
     <form method="post" action="{% url 'release_case' case.tracking_id %}" class="card">
         {% csrf_token %}
+        <label style="display:flex; align-items:flex-start; gap:10px; margin-bottom:12px;">
+            <input type="checkbox" name="release_confirm" value="1" required style="width:auto; margin-top:3px;" />
+            <span class="muted">
+                I hereby confirm that I have thoroughly reviewed and verified the accuracy of the information provided above,
+                and I acknowledge that it is final and cannot be modified after submission.
+            </span>
+        </label>
         <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
             <div>
                 <strong>Release</strong>
@@ -275,7 +322,7 @@
     </form>
 {% endif %}
 
-{% if history %}
+{% if show_internal and history %}
     <div class="card card--flat">
         <div class="card__header">
             <strong>Case History</strong>

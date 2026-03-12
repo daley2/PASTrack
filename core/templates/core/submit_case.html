@@ -56,7 +56,11 @@
             </div>
             <div>
                 <label for="{{ form.client_number.id_for_label }}">Client Number</label>
-                {{ form.client_number }}
+                <div class="input-prefix">
+                    <span class="input-prefix__fixed">+63</span>
+                    {{ form.client_number }}
+                </div>
+                <div class="muted mt-4 fs-92">Enter the remaining 10 digits (example: 9XXXXXXXXX).</div>
                 {{ form.client_number.errors }}
             </div>
             <div>
@@ -68,6 +72,12 @@
                 <label for="{{ form.case_type.id_for_label }}">Type of Case</label>
                 {{ form.case_type }}
                 {{ form.case_type.errors }}
+            </div>
+            <div class="span-2" data-title-type-wrap style="display:none;">
+                <label for="{{ form.property_title_type.id_for_label }}">Property Title Type</label>
+                {{ form.property_title_type }}
+                {{ form.property_title_type.errors }}
+                <div class="muted mt-4 fs-92">Shown only for Land First Time and Transfer of Ownership cases.</div>
             </div>
         </div>
 
@@ -186,6 +196,12 @@
                 <label>Type of Case</label>
                 <div>{{ case.get_case_type_display|default:"—" }}</div>
             </div>
+            {% if case.case_type == "land_first_time" or case.case_type == "transfer_ownership_tax_decl" %}
+                <div>
+                    <label>Property Title Type</label>
+                    <div>{{ case.get_property_title_type_display|default:"—" }}</div>
+                </div>
+            {% endif %}
             <div class="span-2">
                 <label>Checklist</label>
                 {% if checklist %}
@@ -305,6 +321,28 @@
 
         document.addEventListener('DOMContentLoaded', syncAll);
         syncAll();
+
+        function syncTitleType() {
+            var typeSelect = document.getElementById('{{ form.case_type.id_for_label }}');
+            var wrap = document.querySelector('[data-title-type-wrap]');
+            if (!typeSelect || !wrap) return;
+            var val = (typeSelect.value || '').trim();
+            var show = (val === 'land_first_time' || val === 'transfer_ownership_tax_decl');
+            wrap.style.display = show ? '' : 'none';
+            if (!show) {
+                var sel = wrap.querySelector('select');
+                if (sel) sel.value = '';
+            }
+        }
+
+        document.addEventListener('change', function (e) {
+            var t = e.target;
+            if (t && t.id === '{{ form.case_type.id_for_label }}') {
+                syncTitleType();
+            }
+        });
+        document.addEventListener('DOMContentLoaded', syncTitleType);
+        syncTitleType();
     })();
 </script>
 {% endblock %}
