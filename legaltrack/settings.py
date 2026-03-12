@@ -134,7 +134,7 @@ def _split_csv(value: str | None) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
-_default_hosts = ["localhost", "127.0.0.1", ".vercel.app"]
+_default_hosts = ["localhost", "127.0.0.1", ".vercel.app", ".onrender.com"]
 ALLOWED_HOSTS = _split_csv(_env("DJANGO_ALLOWED_HOSTS")) or _default_hosts
 
 # Required on Vercel (proxy terminates TLS).
@@ -142,9 +142,10 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     CSRF_COOKIE_SECURE = True
     SESSION_COOKIE_SECURE = True
-    # Allow Vercel preview/prod domains by default.
+    # Allow Vercel/Render preview/prod domains by default.
     CSRF_TRUSTED_ORIGINS = _split_csv(_env("DJANGO_CSRF_TRUSTED_ORIGINS")) or [
         "https://*.vercel.app",
+        "https://*.onrender.com",
     ]
 
 
@@ -273,30 +274,39 @@ def _database_from_url(database_url: str) -> dict[str, object]:
     # first. Supabase hosts typically have both A and AAAA records; psycopg2 may
     # pick IPv6 and error with "Cannot assign requested address".
     #
-    # On Vercel, prefer IPv4 by resolving an A record and using the IP directly.
+    # Force IPv4 resolution for serverless platforms (Vercel, Render, AWS Lambda).
+    # These platforms may have IPv6 routing issues with Supabase.
     # sslmode=require does not verify hostnames, so this is safe.
-    if _is_vercel():
+    is_serverless = (
+        _truthy(os.environ.get("VERCEL"))
+        or bool(os.environ.get("VERCEL_ENV"))
+        or bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+        or bool(os.environ.get("RENDER"))  # Render detection
+        or bool(os.environ.get("RAILWAY_ENVIRONMENT"))  # Railway detection
+    )
+    
+    if is_serverless:
         try:
             host_val = config.get("HOST")
             port_val = config.get("PORT")
-
             host = str(host_val or "").strip()
-            port = int(str(port_val or "5432"))
+            port = int(str(port_val or 5432))
             
-            # Only attempt resolution if it looks like a hostname, not an IP
-            if host and not host.replace(".", "").isdigit():
+            # Only resolve if it looks like a hostname (not already an IP)
+            if host and "." in host and not all(c.isdigit() or c == "." for c in host):
                 try:
-                    infos = socket.getaddrinfo(host, port, family=socket.AF_INET, type=socket.SOCK_STREAM)
-                    if infos:
-                        ipv4 = infos[0][4][0]
-                        if ipv4:
-                            config["HOST"] = ipv4
-                except socket.gaierror:
-                    # If resolution fails, just use the hostname as-is
-                    # Vercel/psycopg2 will handle it
+                    # Use socket.gethostbyname for IPv4-only resolution (simpler than getaddrinfo)
+                    ipv4_addr = socket.gethostbyname(host)
+                    if ipv4_addr and ":" not in ipv4_addr:  # Ensure it's IPv4, not IPv6
+                        config["HOST"] = ipv4_addr
+                        # Add connection pool tuning for better serverless stability
+                        if "OPTIONS" not in config:
+                            config["OPTIONS"] = {}
+                        config["OPTIONS"]["connect_timeout"] = 5
+                except (socket.gaierror, socket.error, OSError):
+                    # Resolution failed; keep hostname and let psycopg2 try
                     pass
         except Exception:
-            # If anything goes wrong, keep original config
             pass
 
     return config
