@@ -417,15 +417,42 @@ PASSWORD_HASHERS = [
 # Module 1: password reset tokens should expire within 24 hours
 PASSWORD_RESET_TIMEOUT = 60 * 60 * 24
 
-# Email (dev default): prints emails to the console. Configure SMTP in production.
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = "no-reply@cebu.gov.ph"
+# Email
+# Dev default prints emails to the console. When Brevo SMTP is configured via env,
+# switch to SMTP automatically.
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "no-reply@cebu.gov.ph")
+
+# Email Configuration
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com").strip()
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587") or "587")
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "").strip()
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "").strip()
+EMAIL_USE_TLS = (os.environ.get("EMAIL_USE_TLS", "1").strip() not in {"0", "false", "False"})
+EMAIL_USE_SSL = False
+EMAIL_TIMEOUT = 10
+
+if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
+    # Use custom backend that handles SSL certificate issues on Windows
+    EMAIL_BACKEND = "core.email_backends.GmailEmailBackend"
+else:
+    # Fallback to console for development
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 # Local/dev convenience toggles.
 # - `LEGALTRACK_SEND_EMAILS`: keep emails enabled (console backend in dev).
 # - `LEGALTRACK_SHOW_ACTIVATION_LINK`: show activation link on-screen (dev only).
-LEGALTRACK_SEND_EMAILS = True
-LEGALTRACK_SHOW_ACTIVATION_LINK = True
+LEGALTRACK_SEND_EMAILS = (os.environ.get("LEGALTRACK_SEND_EMAILS", "1").strip() not in {"0", "false", "False"})
+LEGALTRACK_SHOW_ACTIVATION_LINK = (os.environ.get("LEGALTRACK_SHOW_ACTIVATION_LINK", "1").strip() not in {"0", "false", "False"})
+
+# Optional case notifications.
+LEGALTRACK_SEND_CASE_EMAILS = (os.environ.get("LEGALTRACK_SEND_CASE_EMAILS", "1").strip() not in {"0", "false", "False"})
+
+# SNS stub (provider integration not configured yet).
+LEGALTRACK_SNS_ENABLED = (os.environ.get("LEGALTRACK_SNS_ENABLED", "0").strip() not in {"0", "false", "False"})
+
+# Textbelt (SMS) configuration
+TEXTBELT_API_KEY = os.environ.get("TEXTBELT_API_KEY", "").strip()
+TEXTBELT_REGION = os.environ.get("TEXTBELT_REGION", "").strip()  # optional
 
 # Security: Django recommends POST for logout. Allowing GET is convenient during local dev,
 # but should be disabled in production.

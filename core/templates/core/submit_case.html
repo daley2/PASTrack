@@ -1,15 +1,21 @@
 {% extends "base.html" %}
-{% block title %}{% if case %}Request {{ case.tracking_id }}{% else %}New Request{% endif %}{% endblock %}
+{% load core_extras %}
+{% block title %}
+    {% if case and case.tracking_id %}Request {{ case.tracking_id }}
+    {% elif case %}Draft
+    {% else %}New Request
+    {% endif %}
+{% endblock %}
 
 {% block content %}
 <div class="card">
     <h2 class="page-title">New Request Form</h2>
     <p class="page-subtitle">Complete the steps to submit your request to the Capitol.</p>
 
-    {% if case %}
+    {% if case and case.tracking_id %}
         <p><strong>Tracking Number:</strong> {{ case.tracking_id }}</p>
     {% else %}
-        <p class="muted">A tracking number will be generated after Step 1.</p>
+        <p class="muted">A tracking number will be generated only after you submit the request.</p>
     {% endif %}
 
     <div class="subtabs" aria-label="Steps">
@@ -50,7 +56,11 @@
             </div>
             <div>
                 <label for="{{ form.client_number.id_for_label }}">Client Number</label>
-                {{ form.client_number }}
+                <div class="input-prefix">
+                    <span class="input-prefix__fixed">+63</span>
+                    {{ form.client_number }}
+                </div>
+                <div class="muted mt-4 fs-92">Enter the remaining 10 digits (example: 9XXXXXXXXX).</div>
                 {{ form.client_number.errors }}
             </div>
             <div>
@@ -63,11 +73,18 @@
                 {{ form.case_type }}
                 {{ form.case_type.errors }}
             </div>
+            <div class="span-2" data-title-type-wrap style="display:none;">
+                <label for="{{ form.property_title_type.id_for_label }}">Property Title Type</label>
+                {{ form.property_title_type }}
+                {{ form.property_title_type.errors }}
+                <div class="muted mt-4 fs-92">Shown only for Land First Time and Transfer of Ownership cases.</div>
+            </div>
         </div>
 
         <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:14px;">
             <a class="btn btn-secondary" href="{% url 'dashboard' %}">Cancel</a>
-            <button class="btn btn-primary" type="submit">Save & Continue</button>
+            <button class="btn btn-secondary" type="submit" name="save_draft" value="1">Save Draft</button>
+            <button class="btn btn-primary" type="submit" name="save_continue" value="1">Save & Continue</button>
         </div>
     </form>
 {% elif step == 2 %}
@@ -83,45 +100,56 @@
             <div class="card__header">
                 <strong>Document Checklist</strong>
                 <span class="muted">Case type: <strong>{{ case.get_case_type_display|default:"—" }}</strong></span>
-                <span style="margin-left:auto;"><button class="btn btn-secondary btn-sm" type="submit" name="add_row" value="1">+ Add Row</button></span>
             </div>
             <div class="card__body card__body--flush">
                 <table class="table">
                     <thead>
                         <tr>
                             <th style="width:34%">Document Type</th>
-                            <th style="width:12%">Required</th>
                             <th>Upload File</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for f in formset %}
+                        {% for row in rows %}
                             <tr>
                                 <td>
-                                    {{ f.doc_type }}
+                                    {{ row.form.doc_type }}
                                     <div class="mt-4 custom-doc" data-custom-doc style="display:none;">
-                                        {{ f.custom_doc_type }}
+                                        {{ row.form.custom_doc_type }}
                                     </div>
-                                    {% if f.doc_type.errors %}<div class="muted">{{ f.doc_type.errors }}</div>{% endif %}
-                                    {% if f.custom_doc_type.errors %}<div class="muted">{{ f.custom_doc_type.errors }}</div>{% endif %}
+                                    {% if row.form.doc_type.errors %}<div class="muted">{{ row.form.doc_type.errors }}</div>{% endif %}
+                                    {% if row.form.custom_doc_type.errors %}<div class="muted">{{ row.form.custom_doc_type.errors }}</div>{% endif %}
                                 </td>
-                                <td>{{ f.required }}</td>
                                 <td>
-                                    {{ f.file }}
-                                    {% if f.file.errors %}<div class="muted">{{ f.file.errors }}</div>{% endif %}
+                                    {{ row.form.file }}
+                                    {% if row.form.file.errors %}<div class="muted">{{ row.form.file.errors }}</div>{% endif %}
+
+                                    {% if row.doc and row.doc.file %}
+                                        <div class="muted mt-4 fs-92">
+                                            Uploaded: <strong>{{ row.filename|default:row.doc.file.name|cut:"cases/" }}</strong>
+                                            <a class="link-muted" href="{% url 'download_case_document' row.doc.id %}" target="_blank" rel="noopener">(View)</a>
+                                        </div>
+                                    {% endif %}
                                 </td>
                             </tr>
-                            {% if f.non_field_errors %}
-                                <tr><td colspan="3"><div class="msg error">{{ f.non_field_errors }}</div></td></tr>
+                            {% if row.form.non_field_errors %}
+                                <tr><td colspan="2"><div class="msg error">{{ row.form.non_field_errors }}</div></td></tr>
                             {% endif %}
                         {% endfor %}
                     </tbody>
                 </table>
+
+                <div style="padding:10px; border-top:1px solid var(--border);">
+                    <button class="btn btn-secondary btn-sm" type="submit" name="add_row" value="1">+ Add Row</button>
+                </div>
             </div>
         </div>
 
         <div style="display:flex; gap:10px; justify-content:space-between; margin-top:14px;">
-            <a class="btn btn-secondary" href="{% url 'case_wizard' case.tracking_id 1 %}">Back</a>
+            <a class="btn btn-secondary" href="{% url 'draft_wizard' case.draft_id 1 %}">Back</a>
+            {% if not case.tracking_id %}
+                <button class="btn btn-secondary" type="submit" name="save_draft" value="1">Save Draft</button>
+            {% endif %}
             <button class="btn btn-primary" type="submit">Save & Continue</button>
         </div>
     </form>
@@ -168,6 +196,12 @@
                 <label>Type of Case</label>
                 <div>{{ case.get_case_type_display|default:"—" }}</div>
             </div>
+            {% if case.case_type == "land_first_time" or case.case_type == "transfer_ownership_tax_decl" %}
+                <div>
+                    <label>Property Title Type</label>
+                    <div>{{ case.get_property_title_type_display|default:"—" }}</div>
+                </div>
+            {% endif %}
             <div class="span-2">
                 <label>Checklist</label>
                 {% if checklist %}
@@ -175,7 +209,6 @@
                         <thead>
                             <tr>
                                 <th>Document</th>
-                                <th style="width:16%">Required</th>
                                 <th style="width:18%">Uploaded</th>
                             </tr>
                         </thead>
@@ -183,7 +216,6 @@
                             {% for item in checklist %}
                                 <tr>
                                     <td>{{ item.doc_type }}</td>
-                                    <td>{{ item.required|yesno:"Yes,No" }}</td>
                                     <td>{{ item.uploaded|yesno:"Yes,No" }}</td>
                                 </tr>
                             {% endfor %}
@@ -225,7 +257,10 @@
     <form class="card" method="post">
         {% csrf_token %}
         <div style="display:flex; gap:10px; justify-content:space-between;">
-            <a class="btn btn-secondary" href="{% url 'case_wizard' case.tracking_id 2 %}">Back</a>
+            <a class="btn btn-secondary" href="{% url 'draft_wizard' case.draft_id 2 %}">Back</a>
+            {% if not case.tracking_id %}
+                <button class="btn btn-secondary" type="submit" name="save_draft" value="1">Save Draft</button>
+            {% endif %}
             <button class="btn btn-primary" type="submit">Submit Request</button>
         </div>
     </form>
@@ -236,6 +271,28 @@
 {% block extra_js %}
 <script>
     (function () {
+        var dirty = false;
+
+        function markDirty(e) {
+            if (!e || !e.target) return;
+            if (!e.target.closest || !e.target.closest('form')) return;
+            dirty = true;
+        }
+
+        window.addEventListener('beforeunload', function (e) {
+            if (!dirty) return;
+            e.preventDefault();
+            e.returnValue = '';
+        });
+
+        document.addEventListener('input', markDirty, true);
+        document.addEventListener('change', markDirty, true);
+        document.addEventListener('submit', function (e) {
+            if (e && e.target && e.target.tagName === 'FORM') {
+                dirty = false;
+            }
+        }, true);
+
         function syncRow(row) {
             if (!row) return;
             var select = row.querySelector('select[name$="-doc_type"]');
@@ -264,6 +321,28 @@
 
         document.addEventListener('DOMContentLoaded', syncAll);
         syncAll();
+
+        function syncTitleType() {
+            var typeSelect = document.getElementById('{{ form.case_type.id_for_label }}');
+            var wrap = document.querySelector('[data-title-type-wrap]');
+            if (!typeSelect || !wrap) return;
+            var val = (typeSelect.value || '').trim();
+            var show = (val === 'land_first_time' || val === 'transfer_ownership_tax_decl');
+            wrap.style.display = show ? '' : 'none';
+            if (!show) {
+                var sel = wrap.querySelector('select');
+                if (sel) sel.value = '';
+            }
+        }
+
+        document.addEventListener('change', function (e) {
+            var t = e.target;
+            if (t && t.id === '{{ form.case_type.id_for_label }}') {
+                syncTitleType();
+            }
+        });
+        document.addEventListener('DOMContentLoaded', syncTitleType);
+        syncTitleType();
     })();
 </script>
 {% endblock %}

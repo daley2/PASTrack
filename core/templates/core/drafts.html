@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Drafts{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2 class="page-title">Drafts</h2>
+    <p class="page-subtitle">Saved drafts that have no tracking number yet.</p>
+</div>
+
+<div class="card card--flat">
+    <div class="card__header">
+        <strong>Your Draft Requests</strong>
+    </div>
+    <div class="card__body card__body--flush">
+        {% if drafts %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Client</th>
+                        <th>Type</th>
+                        <th style="width:22%">Last Updated</th>
+                        <th style="width:18%">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in drafts %}
+                        <tr>
+                            <td><strong>{{ d.client_display_name|default:d.client_name }}</strong></td>
+                            <td class="muted">{{ d.get_case_type_display|default:"—" }}</td>
+                            <td class="muted">{{ d.updated_at|date:"M d, Y H:i" }}</td>
+                            <td>
+                                <a class="btn btn-secondary btn-sm" href="{% url 'draft_wizard' d.draft_id 1 %}">Continue</a>
+                                <form method="post" action="{% url 'delete_draft' d.draft_id %}" style="display:inline;" onsubmit="return confirm('Delete this draft? This cannot be undone.');">
+                                    {% csrf_token %}
+                                    <button class="btn btn-danger btn-sm" type="submit">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div style="padding:16px;" class="muted">No drafts yet.</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

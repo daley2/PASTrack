@@ -10,71 +10,67 @@
 {% if user.role == 'capitol_receiving' %}
     <div class="card card--flat">
         <div class="card__header">
-            <strong>Pending Requests</strong>
-            <span class="muted">Not Received / Returned</span>
+            <strong>Receiving Queue</strong>
             <span style="margin-left:auto;"><a class="btn btn-primary btn-sm" href="{% url 'submit_case' %}">+ New Request</a></span>
         </div>
         <div class="card__body card__body--flush">
-            {% if pending_cases %}
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th style="width:22%">Tracking No.</th>
-                            <th>Client</th>
-                            <th style="width:18%">Status</th>
-                            <th style="width:18%">Created</th>
-                            <th style="width:14%">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for case in pending_cases %}
-                            <tr>
-                                <td><strong><a href="{% url 'case_detail' case.tracking_id %}">{{ case.tracking_id }}</a></strong></td>
-                                <td>{{ case.client_display_name }}</td>
-                                <td class="muted">{{ case.get_status_display }}</td>
-                                <td class="muted">{{ case.created_at|date:"M d, Y H:i" }}</td>
-                                <td><a class="btn btn-secondary btn-sm" href="{% url 'case_detail' case.tracking_id %}">Open</a></td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            {% else %}
-                <div class="card__body"><p class="muted" style="margin:0;">No pending cases.</p></div>
-            {% endif %}
-        </div>
-    </div>
+            <div class="card__body" style="padding:14px 16px;">
+                <div class="subtabs" aria-label="Receiving tabs">
+                    {% for key,label,count in tabs %}
+                        <a href="?tab={{ key }}"><span class="{% if tab == key %}active{% endif %}">{{ label }} ({{ count }})</span></a>
+                    {% endfor %}
+                </div>
+            </div>
 
-    <div class="card card--flat">
-        <div class="card__header">
-            <strong>Received</strong>
-            <span class="muted">Unassigned</span>
-        </div>
-        <div class="card__body card__body--flush">
-            {% if received_unassigned %}
-                <table class="table">
-                    <thead>
+            {% if page_obj and page_obj.object_list %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th style="width:22%">Tracking No.</th>
+                        <th>Client</th>
+                        <th style="width:18%">Status</th>
+                        <th style="width:18%">{% if tab == 'received' %}Received{% else %}Created{% endif %}</th>
+                        <th style="width:14%">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for case in page_obj.object_list %}
                         <tr>
-                            <th style="width:22%">Tracking No.</th>
-                            <th>Client</th>
-                            <th style="width:18%">Status</th>
-                            <th style="width:20%">Received</th>
-                            <th style="width:14%">Action</th>
+                            <td><strong><a href="{% url 'case_detail' case.tracking_id %}">{{ case.tracking_id }}</a></strong></td>
+                            <td>{{ case.client_display_name }}</td>
+                            <td class="muted">{{ case.get_status_display }}</td>
+                            <td class="muted">
+                                {% if tab == 'received' %}
+                                    {% if case.received_at %}{{ case.received_at|date:"M d, Y H:i" }}{% else %}—{% endif %}
+                                {% else %}
+                                    {{ case.created_at|date:"M d, Y H:i" }}
+                                {% endif %}
+                            </td>
+                            <td><a class="btn btn-secondary btn-sm" href="{% url 'case_detail' case.tracking_id %}">Open</a></td>
                         </tr>
-                    </thead>
-                    <tbody>
-                        {% for case in received_unassigned %}
-                            <tr>
-                                <td><strong><a href="{% url 'case_detail' case.tracking_id %}">{{ case.tracking_id }}</a></strong></td>
-                                <td>{{ case.client_display_name }}</td>
-                                <td class="muted">{{ case.get_status_display }}</td>
-                                <td class="muted">{% if case.received_at %}{{ case.received_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</td>
-                                <td><a class="btn btn-secondary btn-sm" href="{% url 'case_detail' case.tracking_id %}">Open</a></td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            {% if page_obj.has_other_pages %}
+                <div class="pagination">
+                    {% if page_obj.has_previous %}
+                        <a class="pagepill" href="?tab={{ tab }}&page={{ page_obj.previous_page_number }}">Prev</a>
+                    {% endif %}
+                    {% for n in page_obj.paginator.page_range %}
+                        {% if n == page_obj.number %}
+                            <span class="pagepill active">{{ n }}</span>
+                        {% elif n <= 10 %}
+                            <a class="pagepill" href="?tab={{ tab }}&page={{ n }}">{{ n }}</a>
+                        {% endif %}
+                    {% endfor %}
+                    {% if page_obj.has_next %}
+                        <a class="pagepill" href="?tab={{ tab }}&page={{ page_obj.next_page_number }}">Next</a>
+                    {% endif %}
+                </div>
+            {% endif %}
             {% else %}
-                <div class="card__body"><p class="muted" style="margin:0;">No received unassigned cases.</p></div>
+                <div class="card__body"><p class="muted" style="margin:0;">No cases found for this tab.</p></div>
             {% endif %}
         </div>
     </div>
@@ -124,6 +120,7 @@
                     <thead>
                         <tr>
                             <th style="width:22%">Tracking No.</th>
+                            <th style="width:10%">LGU Code</th>
                             <th>Client</th>
                             <th style="width:18%">Status</th>
                             <th style="width:20%">Updated</th>
@@ -134,6 +131,7 @@
                         {% for case in queue_cases %}
                             <tr>
                                 <td><strong><a href="{% url 'case_detail' case.tracking_id %}">{{ case.tracking_id }}</a></strong></td>
+                                <td class="muted">{{ case.lgu_area_code|default:"—" }}</td>
                                 <td>{{ case.client_display_name }}</td>
                                 <td class="muted">{{ case.get_status_display }}</td>
                                 <td class="muted">{{ case.updated_at|date:"M d, Y H:i" }}</td>
@@ -152,6 +150,7 @@
     <div class="card card--flat">
         <div class="card__header">
             <strong>For Numbering</strong>
+            <span class="muted">Last used: <strong>{{ last_used_number|default:"—" }}</strong> · Suggested next: <strong>{{ suggested_next_number }}</strong></span>
         </div>
         <div class="card__body">
             <form method="get" class="searchbar m-0">
