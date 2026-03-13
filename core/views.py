@@ -1273,7 +1273,7 @@ def _seed_case_checklist(*, case: Case) -> None:
 @never_cache
 def submit_case(request):
     if request.user.role not in {"lgu_admin", "capitol_receiving"}:
-        messages.error(request, "Only LGU Admins and Capitol Receiver can create a new request.")
+        messages.error(request, "Only LGU Admins and Receiver can create a new request.")
         return redirect("dashboard")
 
     if request.method == "POST":
@@ -1387,7 +1387,7 @@ def case_wizard(request, tracking_id, step: int):
     case = get_object_or_404(Case, tracking_id=tracking_id)
 
     if request.user.role not in {"lgu_admin", "capitol_receiving"}:
-        messages.error(request, "Only LGU Admins and Capitol Receiver can edit submissions.")
+        messages.error(request, "Only LGU Admins and Receiver can edit submissions.")
         return redirect("dashboard")
 
     if not _lgu_can_edit_details(request.user, case):
@@ -1591,8 +1591,14 @@ def case_wizard(request, tracking_id, step: int):
             case.client_correction_deadline = None
 
         case.lgu_submitted_at = timezone.now()
+        
+        # Priority: 1. case.area, 2. submitted_by.lgu_municipality
+        effective_mun = (case.area or "").strip()
+        if not effective_mun:
+            effective_mun = getattr(getattr(case, "submitted_by", None), "lgu_municipality", "")
+            
         if not (case.lgu_area_code or "").strip():
-            case.lgu_area_code = _municipality_area_code(getattr(getattr(case, "submitted_by", None), "lgu_municipality", ""))
+            case.lgu_area_code = _municipality_area_code(effective_mun)
         case.save(update_fields=["status", "client_correction_deadline", "lgu_area_code", "lgu_submitted_at", "updated_at"])
 
         AuditLog.objects.create(
@@ -1639,7 +1645,7 @@ def draft_wizard(request, draft_id, step: int):
         return redirect("case_detail", tracking_id=case.tracking_id)
 
     if request.user.role not in {"lgu_admin", "capitol_receiving"}:
-        messages.error(request, "Only LGU Admins and Capitol Receiver can edit drafts.")
+        messages.error(request, "Only LGU Admins and Receiver can edit drafts.")
         return redirect("dashboard")
 
     if not _lgu_can_edit_details(request.user, case):
@@ -1855,8 +1861,14 @@ def draft_wizard(request, draft_id, step: int):
 
         case.status = "not_received"
         case.lgu_submitted_at = timezone.now()
+
+        # Priority: 1. case.area, 2. submitted_by.lgu_municipality
+        effective_mun = (case.area or "").strip()
+        if not effective_mun:
+            effective_mun = getattr(getattr(case, "submitted_by", None), "lgu_municipality", "")
+
         if not (case.lgu_area_code or "").strip():
-            case.lgu_area_code = _municipality_area_code(getattr(getattr(case, "submitted_by", None), "lgu_municipality", ""))
+            case.lgu_area_code = _municipality_area_code(effective_mun)
         case.save(update_fields=["status", "lgu_area_code", "lgu_submitted_at", "updated_at", "tracking_id"])
 
         AuditLog.objects.create(
@@ -2234,7 +2246,7 @@ def return_case(request, tracking_id):
     case = get_object_or_404(Case, tracking_id=tracking_id)
 
     if request.user.role != "capitol_receiving":
-        messages.error(request, "Only Capitol Receiver can return cases.")
+        messages.error(request, "Only Receiver can return cases.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
     if case.status not in {"not_received", "received"}:
@@ -2302,7 +2314,7 @@ def assign_case(request, tracking_id):
     case = get_object_or_404(Case, tracking_id=tracking_id)
 
     if request.user.role != "capitol_receiving":
-        messages.error(request, "Only Capitol Receiver can assign cases.")
+        messages.error(request, "Only Receiver can assign cases.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
     if case.status != "received" or case.assigned_to_id is not None:
@@ -2323,7 +2335,7 @@ def assign_case(request, tracking_id):
         target_object=f"Case: {case.tracking_id}",
         details={
             "new_status": case.status,
-            "assigned_to": examiner.email,
+            "assigned_to": f"{examiner.get_full_name()} - {examiner.get_role_display()}",
         }
     )
 
@@ -2337,7 +2349,7 @@ def submit_for_approval(request, tracking_id):
     case = get_object_or_404(Case, tracking_id=tracking_id)
 
     if request.user.role != "capitol_examiner":
-        messages.error(request, "Only Capitol Examiners can submit cases for approval.")
+        messages.error(request, "Only Examiners can submit cases for approval.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
     if case.status not in {"for_review", "under_review"} or case.assigned_to_id != request.user.id:
@@ -2365,7 +2377,7 @@ def approve_case(request, tracking_id):
     case = get_object_or_404(Case, tracking_id=tracking_id)
 
     if request.user.role != "capitol_approver":
-        messages.error(request, "Only Capitol Approvers can approve cases.")
+        messages.error(request, "Only Approvers can approve cases.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
     if case.status != "for_approval":
@@ -2403,7 +2415,7 @@ def return_for_correction(request, tracking_id):
     case = get_object_or_404(Case, tracking_id=tracking_id)
 
     if request.user.role != "capitol_approver":
-        messages.error(request, "Only Capitol Approvers can return cases for correction.")
+        messages.error(request, "Only Approvers can return cases for correction.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
     if case.status != "for_approval":
@@ -2436,7 +2448,12 @@ def return_for_correction(request, tracking_id):
         actor=request.user,
         action="case_status_change",
         target_object=f"Case: {case.tracking_id}",
-        details={"old_status": old_status, "new_status": case.status, "reason": reason, "to": "capitol_examiner"}
+        details={
+            "old_status": old_status,
+            "new_status": case.status,
+            "reason": reason,
+            "returned_to": "Examiner"
+        }
     )
 
     messages.success(request, f"Case {case.tracking_id} returned to examiner for correction.")
@@ -2449,7 +2466,7 @@ def return_to_receiving(request, tracking_id):
     case = get_object_or_404(Case, tracking_id=tracking_id)
 
     if request.user.role != "capitol_examiner":
-        messages.error(request, "Only Capitol Examiners can return cases to Receiving.")
+        messages.error(request, "Only Examiners can return cases to Receiving.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
     if case.status not in {"for_review", "under_review"} or case.assigned_to_id != request.user.id:
@@ -2485,7 +2502,12 @@ def return_to_receiving(request, tracking_id):
         actor=request.user,
         action="case_status_change",
         target_object=f"Case: {case.tracking_id}",
-        details={"old_status": old_status, "new_status": case.status, "reason": reason, "to": "capitol_receiving"},
+        details={
+            "old_status": old_status,
+            "new_status": case.status,
+            "reason": reason,
+            "returned_to": "Receiver"
+        }
     )
 
     messages.success(request, f"Case {case.tracking_id} returned to Receiving.")
@@ -2546,6 +2568,10 @@ def mark_numbered(request, tracking_id):
         messages.error(request, str(exc))
         return redirect("case_detail", tracking_id=case.tracking_id)
 
+    if (request.POST.get("finalize_confirm") or "").strip() != "1":
+        messages.error(request, "Finalize confirmation is required.")
+        return redirect("case_detail", tracking_id=case.tracking_id)
+
     last_used = CaseNumber.objects.order_by("-number").values_list("number", flat=True).first() or 0
 
     with transaction.atomic():
@@ -2570,7 +2596,9 @@ def mark_numbered(request, tracking_id):
         return redirect("case_detail", tracking_id=case.tracking_id)
 
     if any(n > int(last_used) + 1 for n in final_numbers):
-        messages.warning(request, f"Sequence jump detected. Last used was {last_used}.")
+        if (request.POST.get("confirm_sequence") or "").strip() != "1":
+            messages.error(request, f"Sequence jump detected (Last used was {last_used}). Please check the 'Confirm non-sequential numbering' box to proceed.")
+            return redirect("case_detail", tracking_id=case.tracking_id)
 
     old_status = case.status
     case.status = "for_release"
@@ -2593,15 +2621,11 @@ def release_case(request, tracking_id):
     case = get_object_or_404(Case, tracking_id=tracking_id)
 
     if request.user.role != "capitol_releaser":
-        messages.error(request, "Only Capitol Releasers can release cases.")
+        messages.error(request, "Only Releasers can release cases.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
     if case.status != "for_release":
         messages.error(request, "This case is not eligible for release.")
-        return redirect("case_detail", tracking_id=case.tracking_id)
-
-    if (request.POST.get("release_confirm") or "").strip() != "1":
-        messages.error(request, "Release confirmation is required.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
     old_status = case.status

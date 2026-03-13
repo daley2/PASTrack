@@ -63,6 +63,7 @@ class CaseDetailsForm(forms.ModelForm):
             "client_suffix",
             "client_number",
             "client_email",
+            "area",
             "case_type",
             "property_title_type",
         ]
@@ -79,6 +80,7 @@ class CaseDetailsForm(forms.ModelForm):
                 "maxlength": "10",
             }),
             "client_email": forms.EmailInput(attrs={"placeholder": "Client email"}),
+            "area": forms.Select(),
             "case_type": forms.Select(),
             "property_title_type": forms.Select(),
         }
@@ -90,6 +92,8 @@ class CaseDetailsForm(forms.ModelForm):
             self.add_error("client_first_name", "First name is required.")
         if not (cleaned.get("client_last_name") or "").strip():
             self.add_error("client_last_name", "Last name is required.")
+        if not (cleaned.get("area") or "").strip():
+            self.add_error("area", "Area is required.")
         if not (cleaned.get("case_type") or "").strip():
             self.add_error("case_type", "Type of case is required.")
 
@@ -201,17 +205,17 @@ class StaffAccountCreateForm(forms.ModelForm):
     capitol_role = forms.ChoiceField(
         required=False,
         choices=[
-            ("capitol_receiving", "Capitol Receiver"),
-            ("capitol_examiner", "Capitol Examiner"),
-            ("capitol_approver", "Capitol Approver"),
-            ("capitol_numberer", "Capitol Numberer"),
-            ("capitol_releaser", "Capitol Releaser"),
+            ("capitol_receiving", "Receiver"),
+            ("capitol_examiner", "Examiner"),
+            ("capitol_approver", "Approver"),
+            ("capitol_numberer", "Numberer"),
+            ("capitol_releaser", "Releaser"),
         ],
         widget=forms.Select(),
     )
 
     lgu_municipality = forms.ChoiceField(
-        required=True,
+        required=False,
         choices=CustomUser.LGU_MUNICIPALITY_CHOICES,
         widget=forms.Select(),
     )
@@ -235,14 +239,14 @@ class StaffAccountCreateForm(forms.ModelForm):
         capitol_role = cleaned.get("capitol_role")
         lgu_municipality = (cleaned.get("lgu_municipality") or "").strip()
 
-        if not lgu_municipality:
-            raise ValidationError("Please select an LGU municipality assignment.")
-
-        if account_type == "capitol":
+        if account_type == "lgu":
+            if not lgu_municipality:
+                raise ValidationError("Please select an LGU municipality assignment.")
+        elif account_type == "capitol":
             if not capitol_role:
-                raise ValidationError("Please select a Capitol position.")
-        elif account_type == "lgu":
-            pass
+                raise ValidationError("Please select a position.")
+            # Clear LGU for capitol accounts
+            cleaned["lgu_municipality"] = ""
         else:
             raise ValidationError("Invalid account type.")
 
@@ -374,7 +378,7 @@ class AccountActivationForm(forms.Form):
 
 class StaffAccountUpdateForm(forms.ModelForm):
     lgu_municipality = forms.ChoiceField(
-        required=True,
+        required=False,
         choices=CustomUser.LGU_MUNICIPALITY_CHOICES,
         widget=forms.Select(),
         help_text="Assigned LGU municipality (used for dashboard visibility).",
@@ -388,6 +392,9 @@ class StaffAccountUpdateForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         user: CustomUser = self.instance
         self.initial["lgu_municipality"] = (getattr(user, "lgu_municipality", "") or "").strip()
+        if user.role != "lgu_admin":
+            # Remove the field for non-LGU roles
+            del self.fields["lgu_municipality"]
 
     def clean_full_name(self):
         cleaned = self.cleaned_data or {}
@@ -397,6 +404,10 @@ class StaffAccountUpdateForm(forms.ModelForm):
         user: CustomUser = super().save(commit=False)
         if "lgu_municipality" in self.cleaned_data:
             user.lgu_municipality = str(self.cleaned_data.get("lgu_municipality") or "")
+        else:
+            # If not in form, it might be a capitol user, so ensure it's empty
+            if user.role != "lgu_admin":
+                user.lgu_municipality = ""
         if commit:
             user.save()
         return user

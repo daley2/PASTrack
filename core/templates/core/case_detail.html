@@ -293,6 +293,20 @@
 
         <label for="id_numbers">Add numbers</label>
         <textarea id="id_numbers" name="numbers" rows="2" placeholder="e.g. {{ suggested_next_number }}, {{ suggested_next_number|add:'1' }}">{{ suggested_next_number }}</textarea>
+        
+        <label style="display:flex; align-items:flex-start; gap:10px; margin-top:12px;">
+            <input type="checkbox" name="confirm_sequence" value="1" style="width:auto; margin-top:3px;" />
+            <span class="muted">Confirm non-sequential numbering (if adding a number that isn't next in line).</span>
+        </label>
+
+        <label style="display:flex; align-items:flex-start; gap:10px; margin-top:12px; margin-bottom:12px;">
+            <input type="checkbox" name="finalize_confirm" value="1" required style="width:auto; margin-top:3px;" />
+            <span class="muted">
+                I hereby confirm that I have thoroughly reviewed and verified the accuracy of the information provided above,
+                and I acknowledge that it is final and cannot be modified after submission.
+            </span>
+        </label>
+
         <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:12px;">
             <div>
                 <div class="muted">Move this case to For Release.</div>
@@ -305,13 +319,6 @@
 {% if can_release %}
     <form method="post" action="{% url 'release_case' case.tracking_id %}" class="card">
         {% csrf_token %}
-        <label style="display:flex; align-items:flex-start; gap:10px; margin-bottom:12px;">
-            <input type="checkbox" name="release_confirm" value="1" required style="width:auto; margin-top:3px;" />
-            <span class="muted">
-                I hereby confirm that I have thoroughly reviewed and verified the accuracy of the information provided above,
-                and I acknowledge that it is final and cannot be modified after submission.
-            </span>
-        </label>
         <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
             <div>
                 <strong>Release</strong>
@@ -323,21 +330,42 @@
 {% endif %}
 
 {% if show_internal and history %}
-    <div class="card card--flat">
-        <div class="card__header">
+    <div class="card card--flat" x-data="{ historyExpanded: false }">
+        <div class="card__header" style="display:flex; justify-content:space-between; align-items:center;">
             <strong>Case History</strong>
+            <button @click="historyExpanded = !historyExpanded" class="btn btn-link" type="button">
+                <span x-show="!historyExpanded">Add more (Show all)</span>
+                <span x-show="historyExpanded">Add less (Collapse)</span>
+            </button>
         </div>
         <div class="card__body" style="padding:0;">
             <table class="table">
                 <thead>
                     <tr>
-                        <th style="width:22%">When</th>
+                        <th style="width:22%">Time</th>
                         <th style="width:22%">Action</th>
                         <th style="width:22%">By</th>
-                        <th>Details</th>
+                        <th>Remarks</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody x-show="!historyExpanded">
+                    {% for h in history|slice:":5" %}
+                        <tr>
+                            <td class="muted">{{ h.created_at|date:"M d, Y H:i" }}</td>
+                            <td>{{ h.get_action_display }}</td>
+                            <td class="muted">{{ h.actor|default:"—" }}</td>
+                            <td class="muted">{{ h.details_display|default:"—"|linebreaksbr }}</td>
+                        </tr>
+                    {% endfor %}
+                    {% if history|length > 5 %}
+                        <tr>
+                            <td colspan="4" class="text-center muted fs-92" style="padding:12px;">
+                                ... showing latest 5 events ...
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+                <tbody x-show="historyExpanded" x-cloak>
                     {% for h in history %}
                         <tr>
                             <td class="muted">{{ h.created_at|date:"M d, Y H:i" }}</td>

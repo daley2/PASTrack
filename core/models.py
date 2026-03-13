@@ -56,11 +56,11 @@ class CustomUser(AbstractUser):
     ROLE_CHOICES: ClassVar[list[tuple[str, str]]] = [
         ("super_admin", "Super Admin"),
         ("lgu_admin", "LGU Admin"),
-        ("capitol_receiving", "Capitol Receiver"),
-        ("capitol_examiner", "Capitol Examiner"),
-        ("capitol_approver", "Capitol Approver"),
-        ("capitol_numberer", "Capitol Numberer"),
-        ("capitol_releaser", "Capitol Releaser"),
+        ("capitol_receiving", "Receiver"),
+        ("capitol_examiner", "Examiner"),
+        ("capitol_approver", "Approver"),
+        ("capitol_numberer", "Numberer"),
+        ("capitol_releaser", "Releaser"),
     ]
 
     email = models.EmailField(unique=True, blank=False, null=False)
@@ -458,6 +458,12 @@ class Case(TimestampedModel):
 
     # LGU metadata
     lgu_area_code = models.CharField(max_length=12, blank=True, default="")
+    area = models.CharField(
+        max_length=64,
+        blank=True,
+        choices=CustomUser.LGU_MUNICIPALITY_CHOICES,
+        default="",
+    )
 
     # ---------- Checklist (JSON) ----------
     checklist = models.JSONField(

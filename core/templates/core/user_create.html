@@ -47,7 +47,7 @@
                 </div>
             </div>
 
-            <div class="span-2">
+            <div id="lgu-assignment-wrap" class="span-2">
                 <label for="{{ form.lgu_municipality.id_for_label }}">LGU Assigned</label>
                 {{ form.lgu_municipality }}
                 {{ form.lgu_municipality.errors }}
@@ -66,14 +66,17 @@
         var roleSelect = document.getElementById("{{ form.account_type.id_for_label }}");
         var capitol = document.getElementById("capitol-fields");
         var lgu = document.getElementById("lgu-fields");
+        var lguAssignWrap = document.getElementById("lgu-assignment-wrap");
         function sync() {
             var v = roleSelect ? roleSelect.value : "capitol";
             if (v === "lgu") {
                 if (capitol) capitol.style.display = "none";
                 if (lgu) lgu.style.display = "block";
+                if (lguAssignWrap) lguAssignWrap.style.display = "block";
             } else {
                 if (capitol) capitol.style.display = "block";
                 if (lgu) lgu.style.display = "none";
+                if (lguAssignWrap) lguAssignWrap.style.display = "none";
             }
         }
         if (roleSelect) {

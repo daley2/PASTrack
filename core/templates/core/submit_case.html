@@ -68,6 +68,11 @@
                 {{ form.client_email }}
                 {{ form.client_email.errors }}
             </div>
+            <div>
+                <label for="{{ form.area.id_for_label }}">Area</label>
+                {{ form.area }}
+                {{ form.area.errors }}
+            </div>
             <div class="span-2">
                 <label for="{{ form.case_type.id_for_label }}">Type of Case</label>
                 {{ form.case_type }}
