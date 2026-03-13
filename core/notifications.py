@@ -24,13 +24,18 @@ def send_case_email(*, to_email: str, subject: str, message: str) -> bool:
         return False
     if not bool(getattr(settings, "LEGALTRACK_SEND_EMAILS", True)):
         return False
-    send_mail(
-        subject,
-        message,
-        getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@cebu.gov.ph"),
-        [to_email],
-        fail_silently=True,
-    )
+    try:
+        send_mail(
+            subject,
+            message,
+            getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@cebu.gov.ph"),
+            [to_email],
+            fail_silently=False,
+        )
+    except Exception as e:
+        import sys
+        print(f"[SMTP-CASE-EMAIL] FAILED: {e}", file=sys.stderr)
+        return False
     return True
 
 

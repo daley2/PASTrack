@@ -444,7 +444,10 @@ DEFAULT_FROM_EMAIL = _env("DEFAULT_FROM_EMAIL", "no-reply@cebu.gov.ph")
 EMAIL_HOST = _env("EMAIL_HOST", "smtp.gmail.com")
 EMAIL_PORT = int(_env("EMAIL_PORT", "587") or "587")
 EMAIL_HOST_USER = _env("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = _env("EMAIL_HOST_PASSWORD", "")
+# Gmail app passwords are 16 letters; Google UI shows spaces for readability
+# (e.g. 'xxxx xxxx xxxx xxxx'), but the actual password is 'xxxxxxxxxxxxxxxx'.
+# We strip all spaces here to prevent common copy-paste errors.
+EMAIL_HOST_PASSWORD = (_env("EMAIL_HOST_PASSWORD") or "").replace(" ", "").strip()
 EMAIL_USE_TLS = _truthy(_env("EMAIL_USE_TLS", "1"))
 EMAIL_USE_SSL = _truthy(_env("EMAIL_USE_SSL", "0"))
 EMAIL_TIMEOUT = 10
