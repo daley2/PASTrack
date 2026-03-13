@@ -441,9 +441,28 @@ PASSWORD_RESET_TIMEOUT = 60 * 60 * 24
 DEFAULT_FROM_EMAIL = _env("DEFAULT_FROM_EMAIL", "no-reply@cebu.gov.ph")
 
 # Email Configuration
-EMAIL_HOST = _env("EMAIL_HOST", "smtp.gmail.com")
+_raw_email_host = _env("EMAIL_HOST", "smtp.gmail.com")
 EMAIL_PORT = int(_env("EMAIL_PORT", "587") or "587")
 EMAIL_HOST_USER = _env("EMAIL_HOST_USER", "")
+
+# Resolve EMAIL_HOST to IPv4 if requested (helps with Render/Vercel IPv6 issues)
+EMAIL_HOST = _raw_email_host
+if _truthy(_env("LEGALTRACK_FORCE_IPV4_EMAIL", "true" if not DEBUG else "false")):
+    try:
+        import socket
+        # Force IPv4 resolution
+        addr_infos = socket.getaddrinfo(
+            _raw_email_host, 
+            EMAIL_PORT,
+            family=socket.AF_INET, 
+            type=socket.SOCK_STREAM
+        )
+        if addr_infos:
+            EMAIL_HOST = addr_infos[0][4][0]
+            print(f"[DEBUG-IPv4-EMAIL] Resolved {_raw_email_host} to {EMAIL_HOST}", file=sys.stderr)
+    except Exception as e:
+        print(f"[DEBUG-IPv4-EMAIL] FAILED: {e}. Falling back to hostname.", file=sys.stderr)
+
 # Gmail app passwords are 16 letters; Google UI shows spaces for readability
 # (e.g. 'xxxx xxxx xxxx xxxx'), but the actual password is 'xxxxxxxxxxxxxxxx'.
 # We strip all spaces here to prevent common copy-paste errors.

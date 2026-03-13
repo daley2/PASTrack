@@ -825,11 +825,20 @@ def create_staff_account(request):
             user.account_status = "pending"
             user.save(created_by=request.user)
 
-            activation_link = user.issue_activation(
-                request=request,
-                temp_password=temp_password,
-                send_email=getattr(settings, "LEGALTRACK_SEND_EMAILS", True),
-            )
+            try:
+                activation_link = user.issue_activation(
+                    request=request,
+                    temp_password=temp_password,
+                    send_email=getattr(settings, "LEGALTRACK_SEND_EMAILS", True),
+                )
+            except Exception as e:
+                import sys
+                print(f"[SMTP-CREATE-ERROR] FAILED: {e}", file=sys.stderr)
+                # We still created the user, but email failed. 
+                # The user_created.html template can show the link if LEGALTRACK_SHOW_ACTIVATION_LINK is True.
+                activation_link = f"Error sending email: {e}"
+                messages.warning(request, "User account created, but the activation email could not be sent. Please check SMTP logs.")
+
             activation_sent = bool(getattr(settings, "LEGALTRACK_SEND_EMAILS", True))
             show_activation_link = bool(getattr(settings, "LEGALTRACK_SHOW_ACTIVATION_LINK", False))
 
@@ -978,11 +987,18 @@ def resend_activation(request, user_id):
     target.temp_password_created_at = timezone.now()
     target.save(update_fields=["password", "temp_password_created_at"])
 
-    activation_link = target.issue_activation(
-        request=request,
-        temp_password=temp_password,
-        send_email=getattr(settings, "LEGALTRACK_SEND_EMAILS", True),
-    )
+    try:
+        activation_link = target.issue_activation(
+            request=request,
+            temp_password=temp_password,
+            send_email=getattr(settings, "LEGALTRACK_SEND_EMAILS", True),
+        )
+    except Exception as e:
+        import sys
+        print(f"[SMTP-RESEND-ERROR] FAILED: {e}", file=sys.stderr)
+        messages.error(request, "Failed to send activation email. Please check your SMTP settings.")
+        return redirect("user_management")
+
     activation_sent = bool(getattr(settings, "LEGALTRACK_SEND_EMAILS", True))
     show_activation_link = bool(getattr(settings, "LEGALTRACK_SHOW_ACTIVATION_LINK", False))
 

@@ -226,13 +226,20 @@ class CustomUser(AbstractUser):
         )
 
         if send_email:
-            send_mail(
-                subject,
-                message,
-                getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@cebu.gov.ph"),
-                [self.email],
-                fail_silently=False,
-            )
+            try:
+                from django.core.mail import send_mail
+                send_mail(
+                    subject,
+                    message,
+                    getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@cebu.gov.ph"),
+                    [self.email],
+                    fail_silently=False,
+                )
+            except Exception as e:
+                import sys
+                print(f"[SMTP-ACTIVATION-ERROR] FAILED: {e}", file=sys.stderr)
+                # Re-raise so the view can catch it or it shows up in Render logs clearly
+                raise e
 
         return activation_link
 
