@@ -557,7 +557,9 @@ class Case(TimestampedModel):
         yy = now.strftime("%y")
         mm = now.strftime("%m")
 
-        full_prefix = f"PAS{yy}{mm}"
+        # Use lgu_area_code if available, otherwise fallback to "PAS" (Provincial Assessor's Office)
+        prefix = (self.lgu_area_code or "").strip().upper() or "PAS"
+        full_prefix = f"{prefix}{yy}{mm}"
 
         existing_ids = Case.objects.filter(
             tracking_id__startswith=full_prefix
@@ -603,6 +605,14 @@ class Case(TimestampedModel):
         last_err: Exception | None = None
         for _ in range(10):
             self.tracking_id = self.generate_tracking_id()
+            
+            # Ensure tracking_id is included if update_fields is present
+            if "update_fields" in kwargs and kwargs["update_fields"] is not None:
+                fields = list(kwargs["update_fields"])
+                if "tracking_id" not in fields:
+                    fields.append("tracking_id")
+                kwargs["update_fields"] = fields
+
             try:
                 with transaction.atomic():
                     return super().save(*args, **kwargs)

@@ -89,8 +89,11 @@ if DOTENV_PATH.exists():
 def _env(key: str, default: str | None = None) -> str | None:
     val = DOTENV_VALUES.get(key)
     if val is not None and str(val).strip() != "":
-        return str(val)
-    return os.getenv(key) or default
+        return str(val).strip()
+    res = os.getenv(key)
+    if res is not None:
+        return res.strip()
+    return default
 
 
 # Quick-start development settings - unsuitable for production
@@ -262,23 +265,22 @@ def _database_from_url(database_url: str) -> dict[str, object]:
 
     config: dict[str, object] = {
         "ENGINE": engine,
-        "NAME": (parsed.path or "").lstrip("/") or os.getenv("DB_NAME", "postgres"),
-        "USER": parsed.username or os.getenv("DB_USER", "postgres"),
-        "PASSWORD": parsed.password or os.getenv("DB_PASSWORD", "CHANGE_ME_PASSWORD"),
-        "HOST": parsed.hostname or os.getenv("DB_HOST", "CHANGE_ME_HOST"),
-        "PORT": str(parsed.port or os.getenv("DB_PORT", "5432")),
+        "NAME": (parsed.path or "").lstrip("/") or _env("DB_NAME", "postgres"),
+        "USER": parsed.username or _env("DB_USER", "postgres"),
+        "PASSWORD": parsed.password or _env("DB_PASSWORD", "CHANGE_ME_PASSWORD"),
+        "HOST": parsed.hostname or _env("DB_HOST", "CHANGE_ME_HOST"),
+        "PORT": str(parsed.port or _env("DB_PORT", "5432")),
         "OPTIONS": options,
     }
 
-    # Vercel outbound networking can fail when the DB hostname resolves to IPv6
+    # Vercel/Render outbound networking can fail when the DB hostname resolves to IPv6
     # first. Supabase hosts typically have both A and AAAA records; psycopg2 may
     # pick IPv6 and error with "Cannot assign requested address".
     #
-    # Force IPv4 resolution for production deployments to avoid Supabase IPv6 connection issues
-    # Production deployments automatically set is_serverless=True
-    is_serverless = not DEBUG
+    # Force IPv4 resolution for production deployments or when explicitly requested.
+    force_ipv4 = _truthy(_env("LEGALTRACK_FORCE_IPV4", "true" if not DEBUG else "false"))
     
-    if is_serverless:
+    if force_ipv4:
         try:
             host_val = config.get("HOST")
             host = str(host_val or "").strip()
@@ -436,20 +438,20 @@ PASSWORD_RESET_TIMEOUT = 60 * 60 * 24
 # Email
 # Dev default prints emails to the console. When Brevo SMTP is configured via env,
 # switch to SMTP automatically.
-DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "no-reply@cebu.gov.ph")
+DEFAULT_FROM_EMAIL = _env("DEFAULT_FROM_EMAIL", "no-reply@cebu.gov.ph")
 
 # Email Configuration
-EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com").strip()
-EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587") or "587")
-EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "").strip()
-EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "").strip()
-EMAIL_USE_TLS = (os.environ.get("EMAIL_USE_TLS", "1").strip() not in {"0", "false", "False"})
-EMAIL_USE_SSL = False
+EMAIL_HOST = _env("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(_env("EMAIL_PORT", "587") or "587")
+EMAIL_HOST_USER = _env("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = _env("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = _truthy(_env("EMAIL_USE_TLS", "1"))
+EMAIL_USE_SSL = _truthy(_env("EMAIL_USE_SSL", "0"))
 EMAIL_TIMEOUT = 10
 
 if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
     # Use standard SMTP backend for production (Render/Vercel), custom for Windows dev
-    if _is_vercel() or os.environ.get("RENDER"):
+    if _is_vercel() or _truthy(_env("RENDER")):
         # On Render/Vercel (Linux), the standard backend usually works fine with default SSL context.
         # But some environments might still have issues, so we use the custom one if it works better.
         EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
@@ -465,18 +467,18 @@ else:
 # Local/dev convenience toggles.
 # - `LEGALTRACK_SEND_EMAILS`: keep emails enabled (console backend in dev).
 # - `LEGALTRACK_SHOW_ACTIVATION_LINK`: show activation link on-screen (dev only).
-LEGALTRACK_SEND_EMAILS = (os.environ.get("LEGALTRACK_SEND_EMAILS", "1").strip() not in {"0", "false", "False"})
-LEGALTRACK_SHOW_ACTIVATION_LINK = (os.environ.get("LEGALTRACK_SHOW_ACTIVATION_LINK", "1").strip() not in {"0", "false", "False"})
+LEGALTRACK_SEND_EMAILS = _truthy(_env("LEGALTRACK_SEND_EMAILS", "1"))
+LEGALTRACK_SHOW_ACTIVATION_LINK = _truthy(_env("LEGALTRACK_SHOW_ACTIVATION_LINK", "1"))
 
 # Optional case notifications.
-LEGALTRACK_SEND_CASE_EMAILS = (os.environ.get("LEGALTRACK_SEND_CASE_EMAILS", "1").strip() not in {"0", "false", "False"})
+LEGALTRACK_SEND_CASE_EMAILS = _truthy(_env("LEGALTRACK_SEND_CASE_EMAILS", "1"))
 
 # SNS stub (provider integration not configured yet).
-LEGALTRACK_SNS_ENABLED = (os.environ.get("LEGALTRACK_SNS_ENABLED", "0").strip() not in {"0", "false", "False"})
+LEGALTRACK_SNS_ENABLED = _truthy(_env("LEGALTRACK_SNS_ENABLED", "0"))
 
 # Textbelt (SMS) configuration
-TEXTBELT_API_KEY = os.environ.get("TEXTBELT_API_KEY", "").strip()
-TEXTBELT_REGION = os.environ.get("TEXTBELT_REGION", "").strip()  # optional
+TEXTBELT_API_KEY = _env("TEXTBELT_API_KEY", "")
+TEXTBELT_REGION = _env("TEXTBELT_REGION", "")  # optional
 
 # Security: Django recommends POST for logout. Allowing GET is convenient during local dev,
 # but should be disabled in production.

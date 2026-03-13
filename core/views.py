@@ -1067,16 +1067,22 @@ def forgot_password(request):
             
             subject = "LegalTrack Password Reset Code"
             message = f"Your password reset code is: {code}\n\nThis code will expire in 15 minutes."
-            send_mail(
-                subject,
-                message,
-                settings.DEFAULT_FROM_EMAIL,
-                [user.email],
-                fail_silently=False,
-            )
-            request.session["reset_email"] = user.email
-            messages.success(request, "Reset code sent to your email.")
-            return redirect("verify_reset_code")
+            
+            try:
+                send_mail(
+                    subject,
+                    message,
+                    settings.DEFAULT_FROM_EMAIL,
+                    [user.email],
+                    fail_silently=False,
+                )
+                request.session["reset_email"] = user.email
+                messages.success(request, "Reset code sent to your email.")
+                return redirect("verify_reset_code")
+            except Exception as e:
+                import sys
+                print(f"SMTP ERROR: {e}", file=sys.stderr)
+                messages.error(request, "Failed to send reset email. Please contact the administrator.")
         else:
             messages.error(request, "No user found with that email.")
     return render(request, "registration/forgot_password.html")
