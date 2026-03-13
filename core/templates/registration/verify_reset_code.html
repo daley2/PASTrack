@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Verify Code{% endblock %}
+{% block container_class %}container--narrow{% endblock %}
+
+{% block content %}
+<div class="card" style="text-align:center;">
+    <h1 class="page-title">Verify Reset Code</h1>
+    <p class="page-subtitle">We sent a 6-digit code to <strong>{{ email }}</strong>.</p>
+
+    <form method="post" style="text-align:left;">
+        {% csrf_token %}
+        <label for="id_code">Verification Code</label>
+        <input type="text" id="id_code" name="code" required maxlength="6" pattern="\d{6}" placeholder="123456" inputmode="numeric">
+
+        <button class="btn btn-primary" type="submit" style="width:100%; margin-top:14px;">Verify Code</button>
+        
+        <div style="margin-top:12px; text-align:center;">
+            <a class="link-muted" href="{% url 'forgot_password' %}">Resend Code</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

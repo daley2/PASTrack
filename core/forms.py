@@ -95,12 +95,14 @@ class CaseDetailsForm(forms.ModelForm):
 
         raw_num = (cleaned.get("client_number") or "").strip()
         if raw_num:
+            # Remove any non-digit characters first to handle potential existing (+63)
             digits = "".join([c for c in raw_num if c.isdigit()])
-            # Accept: 9XXXXXXXXX, 09XXXXXXXXX, 63 9XXXXXXXXX, +63 9XXXXXXXXX
+            # Accept: 9XXXXXXXXX, 09XXXXXXXXX, 639XXXXXXXXX, +639XXXXXXXXX
             if digits.startswith("0") and len(digits) == 11:
                 digits = digits[1:]
-            if digits.startswith("63") and len(digits) == 12:
+            elif digits.startswith("63") and len(digits) == 12:
                 digits = digits[2:]
+            
             if len(digits) != 10 or not digits.startswith("9"):
                 self.add_error("client_number", "Enter a valid PH mobile number (10 digits starting with 9).")
             else:

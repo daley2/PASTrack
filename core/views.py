@@ -152,7 +152,8 @@ def _public_status_label(case: Case) -> str:
     mapping = {
         "not_received": "Pending",
         "received": "Received",
-        "in_review": "Under Review",
+        "for_review": "Received",
+        "under_review": "Under Review",
         "for_approval": "For Approval",
         "approved": "Approved",
         "for_numbering": "For Numbering",
@@ -173,20 +174,27 @@ def _build_public_timeline(case: Case) -> list[dict[str, object]]:
         if when:
             events.append({"label": label, "when": when})
 
+    # Initial creation
     add("Request Created", case.created_at)
-    add("Physically Received", case.received_at)
-    add("Assigned for Review", case.assigned_at)
-
-    # Key transitions from audit logs (exclude remarks and anything sensitive)
+    
+    # Key transitions from audit logs
     history_qs = (
         AuditLog.objects.filter(target_object=f"Case: {case.tracking_id}")
         .order_by("created_at")
         .only("action", "created_at", "details")
     )
 
+    physically_received_added = False
+
     for h in history_qs:
         action = getattr(h, "action", "")
         if action in {"case_remark", "login", "login_failed", "logout", "create_user", "update_user"}:
+            continue
+
+        if action == "case_receipt":
+            if not physically_received_added:
+                add("Physically Received", h.created_at)
+                physically_received_added = True
             continue
 
         # Prefer status transitions; keep labels public-friendly.
@@ -195,22 +203,34 @@ def _build_public_timeline(case: Case) -> list[dict[str, object]]:
             new_status = None
             if isinstance(details, dict):
                 new_status = details.get("new_status")
+            
             if new_status:
-                label = _public_status_label(type("obj", (), {"status": new_status})())  # tiny adapter
+                # If the status change is 'received', handle it carefully to avoid duplicates
+                if new_status == "received":
+                    if not physically_received_added:
+                        add("Physically Received", h.created_at)
+                        physically_received_added = True
+                    continue
+
+                label = _public_status_label(type("obj", (), {"status": new_status})())
                 add(f"Status: {label}", h.created_at)
             else:
                 add("Status Updated", h.created_at)
-        elif action == "case_receipt":
-            add("Physically Received", h.created_at)
         elif action == "case_assignment":
             add("Assigned for Review", h.created_at)
         elif action == "case_create":
-            add("Request Created", h.created_at)
+            # Already added from case.created_at, but audit log might be more precise for timeline
+            pass
 
-    # De-dup by (label, when)
+    # Add current status if not already reflected (though audit logs should cover it)
+    # But for a cleaner timeline, we trust the audit logs for transitions.
+
+    # De-dup by (label, when) - also handle cases where multiple logs happen at same second
     seen = set()
     uniq = []
     for e in events:
+        # Use a window for "same time" de-duplication if needed, 
+        # but here we'll just de-dup exact label+time
         key = (e["label"], getattr(e["when"], "isoformat", lambda: str(e["when"]))())
         if key in seen:
             continue
@@ -239,6 +259,17 @@ def track_case_detail(request, tracking_id: str):
     case = Case.objects.filter(tracking_id__iexact=tracking, lgu_submitted_at__isnull=False).first()
     if not case:
         return render(request, "core/track_not_found.html", {"tracking": tracking}, status=404)
+
+    if user.role == "capitol_examiner":
+        if case.status == "for_review" and case.assigned_to_id == user.id:
+            case.status = "under_review"
+            case.save(update_fields=["status", "updated_at"])
+            AuditLog.objects.create(
+                actor=user,
+                action="case_status_change",
+                target_object=f"Case: {case.tracking_id}",
+                details={"old_status": "for_review", "new_status": "under_review", "reason": "Case opened by examiner"}
+            )
 
     public_status = _public_status_label(case)
     timeline = _build_public_timeline(case)
@@ -595,7 +626,7 @@ def dashboard(request):
         if user.role == "capitol_receiving":
             tab = (request.GET.get("tab") or "").strip().lower() or "pending"
             pending_qs = Case.objects.filter(status="not_received").order_by("-created_at")
-            received_qs = Case.objects.filter(status="received", assigned_to__isnull=True).order_by("-received_at")
+            received_qs = Case.objects.filter(status__in={"received", "under_review"}, assigned_to__isnull=True).order_by("-received_at")
 
             pending_count = pending_qs.count()
             received_count = received_qs.count()
@@ -614,7 +645,7 @@ def dashboard(request):
             })
 
         elif user.role == "capitol_examiner":
-            my_cases = Case.objects.filter(assigned_to=user, status="in_review").order_by("-assigned_at")[:50]
+            my_cases = Case.objects.filter(assigned_to=user, status__in={"for_review", "under_review"}).order_by("-assigned_at")[:50]
             context.update({"my_cases": my_cases})
 
         elif user.role == "capitol_approver":
@@ -989,27 +1020,28 @@ def set_password_view(request):
     if request.method == "POST":
         form = SetPasswordForm(request.user, request.POST)
         if form.is_valid():
+            now = timezone.now()
+            # Reset monthly count if it's a new month
+            if request.user.last_password_change_at and request.user.last_password_change_at.month != now.month:
+                request.user.password_change_count_this_month = 0
+            
             if request.user.role != "super_admin":
-                cutoff = timezone.now() - timedelta(days=30)
-                recent_changes = AuditLog.objects.filter(
-                    actor=request.user,
-                    action__in=["password_reset_complete", "reset_password"],
-                    created_at__gte=cutoff,
-                ).count()
-                if recent_changes >= 2:
-                    messages.error(request, "Password change limit reached. Contact the Super Admin for approval.")
+                if request.user.password_change_count_this_month >= 2:
+                    messages.error(request, "Password change limit (twice a month) reached. Contact the Super Admin for approval.")
                     return redirect("dashboard")
 
             form.save()
             request.user.must_change_password = False
-            request.user.save(update_fields=["must_change_password"])
+            request.user.password_change_count_this_month += 1
+            request.user.last_password_change_at = now
+            request.user.save(update_fields=["must_change_password", "password_change_count_this_month", "last_password_change_at"])
             update_session_auth_hash(request, request.user)
 
             AuditLog.objects.create(
                 actor=request.user,
                 action="reset_password",
                 target_object=f"User: {request.user.email}",
-                details={"forced_reset": True}
+                details={"forced_reset": True, "count_this_month": request.user.password_change_count_this_month}
             )
 
             messages.success(request, "Password updated.")
@@ -1021,6 +1053,82 @@ def set_password_view(request):
         "role_display": request.user.get_role_display(),
         "form": form,
     })
+
+
+def forgot_password(request):
+    if request.method == "POST":
+        email = request.POST.get("email", "").strip().lower()
+        user = CustomUser.objects.filter(email=email).first()
+        if user:
+            code = "".join(secrets.choice(string.digits) for _ in range(6))
+            user.password_reset_code = code
+            user.password_reset_code_created_at = timezone.now()
+            user.save(update_fields=["password_reset_code", "password_reset_code_created_at"])
+            
+            subject = "LegalTrack Password Reset Code"
+            message = f"Your password reset code is: {code}\n\nThis code will expire in 15 minutes."
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                fail_silently=False,
+            )
+            request.session["reset_email"] = user.email
+            messages.success(request, "Reset code sent to your email.")
+            return redirect("verify_reset_code")
+        else:
+            messages.error(request, "No user found with that email.")
+    return render(request, "registration/forgot_password.html")
+
+
+def verify_reset_code(request):
+    email = request.session.get("reset_email")
+    if not email:
+        return redirect("forgot_password")
+        
+    if request.method == "POST":
+        code = request.POST.get("code", "").strip()
+        user = CustomUser.objects.filter(email=email).first()
+        if user and user.password_reset_code == code:
+            # Check expiration (15 mins)
+            if user.password_reset_code_created_at and (timezone.now() - user.password_reset_code_created_at) < timedelta(minutes=15):
+                request.session["code_verified"] = True
+                return redirect("reset_password_final")
+            else:
+                messages.error(request, "Code has expired.")
+        else:
+            messages.error(request, "Invalid code.")
+            
+    return render(request, "registration/verify_reset_code.html", {"email": email})
+
+
+def reset_password_final(request):
+    email = request.session.get("reset_email")
+    verified = request.session.get("code_verified")
+    if not email or not verified:
+        return redirect("forgot_password")
+        
+    user = CustomUser.objects.filter(email=email).first()
+    if not user:
+        return redirect("forgot_password")
+        
+    if request.method == "POST":
+        form = SetPasswordForm(user, request.POST)
+        if form.is_valid():
+            form.save()
+            user.password_reset_code = ""
+            user.save(update_fields=["password_reset_code"])
+            
+            del request.session["reset_email"]
+            del request.session["code_verified"]
+            
+            messages.success(request, "Password has been reset. You can now log in.")
+            return redirect("login")
+    else:
+        form = SetPasswordForm(user)
+        
+    return render(request, "registration/reset_password_final.html", {"form": form})
 
 
 @login_required
@@ -2002,7 +2110,7 @@ def submissions(request):
         "all": None,
         "pending": {"not_received", "client_correction"},
         "received": {"received"},
-        "under_review": {"in_review"},
+        "under_review": {"for_review", "under_review"},
         "for_approval": {"for_approval"},
         "for_numbering": {"for_numbering"},
         "for_release": {"for_release"},
@@ -2206,7 +2314,7 @@ def assign_case(request, tracking_id):
 
     case.assigned_to = examiner
     case.assigned_at = timezone.now()
-    case.status = "in_review"
+    case.status = "for_review"
     case.save()
 
     AuditLog.objects.create(
@@ -2232,7 +2340,7 @@ def submit_for_approval(request, tracking_id):
         messages.error(request, "Only Capitol Examiners can submit cases for approval.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
-    if case.status != "in_review" or case.assigned_to_id != request.user.id:
+    if case.status not in {"for_review", "under_review"} or case.assigned_to_id != request.user.id:
         messages.error(request, "This case is not eligible for approval submission.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
@@ -2312,7 +2420,7 @@ def return_for_correction(request, tracking_id):
         return redirect("case_detail", tracking_id=case.tracking_id)
 
     old_status = case.status
-    case.status = "in_review"
+    case.status = "under_review"
     case.return_reason = reason
     case.returned_at = timezone.now()
     case.returned_by = request.user
@@ -2344,7 +2452,7 @@ def return_to_receiving(request, tracking_id):
         messages.error(request, "Only Capitol Examiners can return cases to Receiving.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
-    if case.status != "in_review" or case.assigned_to_id != request.user.id:
+    if case.status not in {"for_review", "under_review"} or case.assigned_to_id != request.user.id:
         messages.error(request, "This case is not eligible for return to Receiving.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
@@ -2354,10 +2462,13 @@ def return_to_receiving(request, tracking_id):
         return redirect("case_detail", tracking_id=case.tracking_id)
 
     old_status = case.status
-    case.status = "received"
+    case.status = "under_review"  # Changed from "received" to "under_review" as per request
     case.return_reason = reason
     case.returned_at = timezone.now()
     case.returned_by = request.user
+    # Keep the assignment so the examiner can still see it in 'under_review'? 
+    # Or should it go back to receiving? The prompt says "if the case is return from examiner to receiver. Change status 'Received' to 'Under review'."
+    # This implies the status becomes 'Under review' when it goes back to the receiver.
     case.assigned_to = None
     case.assigned_at = None
     case.save(update_fields=[
@@ -2515,5 +2626,5 @@ def release_case(request, tracking_id):
     )
     sns_hook(event="case_released", payload={"tracking_id": case.tracking_id, "status": case.status})
 
-    messages.success(request, f"Case {case.tracking_id} released.")
+    messages.success(request, f"Case {case.tracking_id} marked as Released.")
     return redirect("case_detail", tracking_id=case.tracking_id)

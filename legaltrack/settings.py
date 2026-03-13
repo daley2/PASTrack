@@ -448,8 +448,8 @@ EMAIL_USE_SSL = False
 EMAIL_TIMEOUT = 10
 
 if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
-    # Use standard SMTP backend for production (Vercel), custom for Windows dev
-    if _is_vercel():
+    # Use standard SMTP backend for production (Render/Vercel), custom for Windows dev
+    if _is_vercel() or os.environ.get("RENDER"):
         EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
     else:
         EMAIL_BACKEND = "core.email_backends.GmailEmailBackend"

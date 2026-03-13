@@ -140,6 +140,13 @@ class CustomUser(AbstractUser):
     # Security (Module 1): account lockout after consecutive failed logins
     failed_login_attempts = models.PositiveSmallIntegerField(default=0)
     lockout_until = models.DateTimeField(null=True, blank=True)
+
+    # ---------- Password Recovery (Module 1.3) ----------
+    password_reset_code = models.CharField(max_length=6, blank=True, default="")
+    password_reset_code_created_at = models.DateTimeField(null=True, blank=True)
+    password_change_count_this_month = models.PositiveSmallIntegerField(default=0)
+    last_password_change_at = models.DateTimeField(null=True, blank=True)
+
     # Use email for login instead of username
     USERNAME_FIELD: ClassVar[str] = "email"
     REQUIRED_FIELDS: ClassVar[list[str]] = []
@@ -394,7 +401,8 @@ class Case(TimestampedModel):
         ("draft", "Draft"),
         ("not_received", "Not Received"),          # LGU created, still editable
         ("received", "Received"),                  # Capitol marked receipt
-        ("in_review", "In Review"),
+        ("for_review", "For Review"),              # Received but not yet opened by examiner
+        ("under_review", "Under Review"),          # Opened by examiner
         ("for_approval", "For Approval"),
         ("approved", "Approved"),
         ("for_numbering", "For Numbering"),
