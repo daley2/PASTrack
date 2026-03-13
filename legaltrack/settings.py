@@ -450,16 +450,11 @@ EMAIL_USE_SSL = _truthy(_env("EMAIL_USE_SSL", "0"))
 EMAIL_TIMEOUT = 10
 
 if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
-    # Use standard SMTP backend for production (Render/Vercel), custom for Windows dev
-    if _is_vercel() or _truthy(_env("RENDER")):
-        # On Render/Vercel (Linux), the standard backend usually works fine with default SSL context.
-        # But some environments might still have issues, so we use the custom one if it works better.
-        EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-        EMAIL_USE_TLS = True
-        EMAIL_USE_SSL = False
-    else:
-        # Custom backend to bypass Windows SSL cert issues
-        EMAIL_BACKEND = "core.email_backends.GmailEmailBackend"
+    # Use custom backend that handles SSL/TLS certificates consistently
+    # This works for both Windows dev and Render/Vercel (Linux) production
+    EMAIL_BACKEND = "core.email_backends.GmailEmailBackend"
+    EMAIL_USE_TLS = True
+    EMAIL_USE_SSL = False
 else:
     # Fallback to console for development
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"

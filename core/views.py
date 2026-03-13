@@ -260,7 +260,8 @@ def track_case_detail(request, tracking_id: str):
     if not case:
         return render(request, "core/track_not_found.html", {"tracking": tracking}, status=404)
 
-    if user.role == "capitol_examiner":
+    user = request.user
+    if user.is_authenticated and user.role == "capitol_examiner":
         if case.status == "for_review" and case.assigned_to_id == user.id:
             case.status = "under_review"
             case.save(update_fields=["status", "updated_at"])
