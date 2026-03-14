@@ -550,9 +550,14 @@ class Case(TimestampedModel):
     def client_display_contact(self) -> str:
         email = (self.client_email or "").strip()
         number = (self.client_number or "").strip()
-        if email and number:
-            return f"{number} / {email}"
-        return number or email or (self.client_contact or "").strip()
+        
+        # Format number with +63 for display/audit purposes only
+        # The stored number is just the 10 digits (9XXXXXXXXX)
+        formatted_number = f"+63{number}" if number else ""
+        
+        if email and formatted_number:
+            return f"{formatted_number} / {email}"
+        return formatted_number or email or (self.client_contact or "").strip()
 
     # ------------------------------------------------------------------
     # Auto-generate tracking_id: PAS[YY][MM][####]
@@ -564,9 +569,8 @@ class Case(TimestampedModel):
         yy = now.strftime("%y")
         mm = now.strftime("%m")
 
-        # Use lgu_area_code if available, otherwise fallback to "PAS" (Provincial Assessor's Office)
-        prefix = (self.lgu_area_code or "").strip().upper() or "PAS"
-        full_prefix = f"{prefix}{yy}{mm}"
+        # Tracking number always starts with "PAS" (Provincial Assessor's Office)
+        full_prefix = f"PAS{yy}{mm}"
 
         existing_ids = Case.objects.filter(
             tracking_id__startswith=full_prefix

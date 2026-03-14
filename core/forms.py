@@ -99,18 +99,21 @@ class CaseDetailsForm(forms.ModelForm):
 
         raw_num = (cleaned.get("client_number") or "").strip()
         if raw_num:
-            # Remove any non-digit characters first to handle potential existing (+63)
+            # Step 1: Extract all digits
             digits = "".join([c for c in raw_num if c.isdigit()])
-            # Accept: 9XXXXXXXXX, 09XXXXXXXXX, 639XXXXXXXXX, +639XXXXXXXXX
-            if digits.startswith("0") and len(digits) == 11:
-                digits = digits[1:]
-            elif digits.startswith("63") and len(digits) == 12:
-                digits = digits[2:]
             
+            # Step 2: Handle common PH prefixes to get the base 10 digits
+            if len(digits) == 12 and digits.startswith("63"):
+                digits = digits[2:]
+            elif len(digits) == 11 and digits.startswith("0"):
+                digits = digits[1:]
+            
+            # Step 3: Validate base 10 digits
             if len(digits) != 10 or not digits.startswith("9"):
-                self.add_error("client_number", "Enter a valid PH mobile number (10 digits starting with 9).")
+                self.add_error("client_number", "Enter a valid 10-digit number starting with 9.")
             else:
-                cleaned["client_number"] = f"+63{digits}"
+                # STORE only the 10 digits (e.g., 9216817799)
+                cleaned["client_number"] = digits
 
         case_type = (cleaned.get("case_type") or "").strip()
         title_type = (cleaned.get("property_title_type") or "").strip()
