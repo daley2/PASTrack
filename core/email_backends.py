@@ -27,11 +27,14 @@ class GmailEmailBackend(SMTPBackend):
         print(f"[SMTP-DEBUG] Attempting connection to {self.host}:{self.port} (TLS={self.use_tls}, SSL={self.use_ssl})", file=sys.stderr)
 
         try:
-            # Force SMTP for port 587 (TLS), SMTP_SSL for port 465 (SSL)
+            # Force SSL for port 465 (SMTP_SSL), STARTTLS for port 587 (SMTP)
             if self.port == 465:
-                print(f"[SMTP-DEBUG] Using SMTP_SSL for port {self.port}", file=sys.stderr)
+                print(f"[SMTP-DEBUG] Using SMTP_SSL for port {self.port} (cert verification DISABLED)", file=sys.stderr)
+                context = ssl.create_default_context()
+                context.check_hostname = False
+                context.verify_mode = ssl.CERT_NONE
                 self.connection = smtplib.SMTP_SSL(
-                    self.host, self.port, timeout=self.timeout
+                    self.host, self.port, timeout=self.timeout, context=context
                 )
             else:
                 print(f"[SMTP-DEBUG] Using standard SMTP for port {self.port}", file=sys.stderr)
@@ -39,9 +42,8 @@ class GmailEmailBackend(SMTPBackend):
                     self.host, self.port, timeout=self.timeout
                 )
 
-            # For TLS connections, create a context that doesn't verify certificates
-            # This is needed for Windows/Python 3.13+ SSL issues
-            if self.use_tls:
+            # For STARTTLS connections (usually port 587)
+            if self.use_tls and self.port != 465:
                 print("[SMTP-DEBUG] Enabling STARTTLS with custom SSL context (cert verification DISABLED)", file=sys.stderr)
                 context = ssl.create_default_context()
                 context.check_hostname = False
