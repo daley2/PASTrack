@@ -442,8 +442,20 @@ DEFAULT_FROM_EMAIL = _env("DEFAULT_FROM_EMAIL", "no-reply@cebu.gov.ph")
 
 # Email Configuration
 _raw_email_host = _env("EMAIL_HOST", "smtp.gmail.com")
-EMAIL_PORT = int(_env("EMAIL_PORT", "587") or "587")
+_raw_port = _env("EMAIL_PORT", "587")
+EMAIL_PORT = int(_raw_port or "587")
 EMAIL_HOST_USER = _env("EMAIL_HOST_USER", "")
+
+# Auto-detect SSL/TLS based on port if not explicitly set correctly
+_env_tls = _env("EMAIL_USE_TLS")
+_env_ssl = _env("EMAIL_USE_SSL")
+
+if EMAIL_PORT == 465:
+    EMAIL_USE_TLS = _truthy(_env_tls) if _env_tls is not None else False
+    EMAIL_USE_SSL = _truthy(_env_ssl) if _env_ssl is not None else True
+else:
+    EMAIL_USE_TLS = _truthy(_env_tls) if _env_tls is not None else True
+    EMAIL_USE_SSL = _truthy(_env_ssl) if _env_ssl is not None else False
 
 # Resolve EMAIL_HOST to IPv4 if requested (helps with Render/Vercel IPv6 issues)
 EMAIL_HOST = _raw_email_host
@@ -467,8 +479,6 @@ if _truthy(_env("LEGALTRACK_FORCE_IPV4_EMAIL", "true" if not DEBUG else "false")
 # (e.g. 'xxxx xxxx xxxx xxxx'), but the actual password is 'xxxxxxxxxxxxxxxx'.
 # We strip all spaces here to prevent common copy-paste errors.
 EMAIL_HOST_PASSWORD = (_env("EMAIL_HOST_PASSWORD") or "").replace(" ", "").strip()
-EMAIL_USE_TLS = _truthy(_env("EMAIL_USE_TLS", "1"))
-EMAIL_USE_SSL = _truthy(_env("EMAIL_USE_SSL", "0"))
 EMAIL_TIMEOUT = 10
 
 if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
