@@ -604,7 +604,11 @@ class Case(TimestampedModel):
                 self.client_contact = contact
 
         if self.tracking_id:
-            return super().save(*args, **kwargs)
+            if self.tracking_id.startswith("PAS"):
+                return super().save(*args, **kwargs)
+            else:
+                # Force regeneration if the prefix is wrong (e.g., DAL, CON)
+                self.tracking_id = ""
 
         # Drafts (not yet submitted) intentionally have no tracking_id.
         # Tracking ID is generated only when the case is submitted.
