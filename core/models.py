@@ -422,8 +422,8 @@ class Case(TimestampedModel):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_received")
 
     # ---------- Client info ----------
-    client_name = models.CharField(max_length=255)
-    client_contact = models.CharField(max_length=100, blank=True)   # phone / email
+    client_name = models.CharField(max_length=255, blank=True, default="")
+    client_contact = models.CharField(max_length=100, blank=True, default="")   # phone / email
 
     client_first_name = models.CharField(max_length=120, blank=True, default="")
     client_last_name = models.CharField(max_length=120, blank=True, default="")

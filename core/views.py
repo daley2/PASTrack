@@ -1349,7 +1349,13 @@ def submit_case(request):
             case.submitted_by = request.user
             case.status = "draft"
             case.lgu_submitted_at = None
-            case.lgu_area_code = _municipality_area_code(getattr(request.user, "lgu_municipality", ""))
+            
+            # Use selected area for prefix if available, fallback to user's municipality
+            effective_mun = (case.area or "").strip()
+            if not effective_mun:
+                effective_mun = getattr(request.user, "lgu_municipality", "")
+            
+            case.lgu_area_code = _municipality_area_code(effective_mun)
             case.save()
 
             # Seed checklist suggestions (uploads happen in Step 2 only).
@@ -1427,7 +1433,16 @@ def case_wizard(request, tracking_id, step: int):
             old_title_type = (case.property_title_type or "").strip()
             form = CaseDetailsForm(request.POST, request.FILES, instance=case)
             if form.is_valid():
-                updated = form.save()
+                updated = form.save(commit=False)
+                
+                # Update prefix based on selected area
+                effective_mun = (updated.area or "").strip()
+                if not effective_mun:
+                    effective_mun = getattr(request.user, "lgu_municipality", "")
+                updated.lgu_area_code = _municipality_area_code(effective_mun)
+                
+                updated.save()
+                
                 new_case_type = (updated.case_type or "").strip()
                 new_title_type = (updated.property_title_type or "").strip()
                 if (new_case_type != old_case_type) or (new_title_type != old_title_type):
