@@ -24,7 +24,13 @@ class GmailEmailBackend(SMTPBackend):
             return False
 
         import sys
-        print(f"[SMTP-DEBUG] Attempting connection to {self.host}:{self.port} (TLS={self.use_tls}, SSL={self.use_ssl})", file=sys.stderr)
+        # Use hostname for SSL/SNI if available, otherwise use host
+        # This is critical for Gmail when connecting via IP address
+        from django.conf import settings
+        _raw_host = getattr(settings, "_raw_email_host", "smtp.gmail.com")
+        
+        print(f"[SMTP-DEBUG] Attempting connection to {self.host}:{self.port} (Using SNI={_raw_host})", file=sys.stderr)
+        print(f"[SMTP-DEBUG] Settings: TLS={self.use_tls}, SSL={self.use_ssl}", file=sys.stderr)
 
         try:
             # Force SSL for port 465 (SMTP_SSL), STARTTLS for port 587 (SMTP)
@@ -33,6 +39,7 @@ class GmailEmailBackend(SMTPBackend):
                 context = ssl.create_default_context()
                 context.check_hostname = False
                 context.verify_mode = ssl.CERT_NONE
+                
                 self.connection = smtplib.SMTP_SSL(
                     self.host, self.port, timeout=self.timeout, context=context
                 )
@@ -57,7 +64,7 @@ class GmailEmailBackend(SMTPBackend):
             print("[SMTP-DEBUG] Connection and login successful", file=sys.stderr)
             return True
         except Exception as e:
-            print(f"[SMTP-DEBUG] Connection/Login FAILED: {e}", file=sys.stderr)
+            print(f"[SMTP-DEBUG] Connection/Login FAILED: {type(e).__name__}: {e}", file=sys.stderr)
             if self.fail_silently:
                 return False
             raise e

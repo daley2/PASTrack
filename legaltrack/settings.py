@@ -446,20 +446,10 @@ _raw_port = _env("EMAIL_PORT", "587")
 EMAIL_PORT = int(_raw_port or "587")
 EMAIL_HOST_USER = _env("EMAIL_HOST_USER", "")
 
-# Auto-detect SSL/TLS based on port if not explicitly set correctly
-_env_tls = _env("EMAIL_USE_TLS")
-_env_ssl = _env("EMAIL_USE_SSL")
-
-if EMAIL_PORT == 465:
-    EMAIL_USE_TLS = _truthy(_env_tls) if _env_tls is not None else False
-    EMAIL_USE_SSL = _truthy(_env_ssl) if _env_ssl is not None else True
-else:
-    EMAIL_USE_TLS = _truthy(_env_tls) if _env_tls is not None else True
-    EMAIL_USE_SSL = _truthy(_env_ssl) if _env_ssl is not None else False
-
 # Resolve EMAIL_HOST to IPv4 if requested (helps with Render/Vercel IPv6 issues)
+# DEFAULT: disabled for email because Gmail infrastructure is complex.
 EMAIL_HOST = _raw_email_host
-if _truthy(_env("LEGALTRACK_FORCE_IPV4_EMAIL", "true" if not DEBUG else "false")):
+if _truthy(_env("LEGALTRACK_FORCE_IPV4_EMAIL", "false")):
     try:
         import socket
         # Force IPv4 resolution
@@ -474,6 +464,17 @@ if _truthy(_env("LEGALTRACK_FORCE_IPV4_EMAIL", "true" if not DEBUG else "false")
             print(f"[DEBUG-IPv4-EMAIL] Resolved {_raw_email_host} to {EMAIL_HOST}", file=sys.stderr)
     except Exception as e:
         print(f"[DEBUG-IPv4-EMAIL] FAILED: {e}. Falling back to hostname.", file=sys.stderr)
+
+# Auto-detect SSL/TLS based on port if not explicitly set correctly
+_env_tls = _env("EMAIL_USE_TLS")
+_env_ssl = _env("EMAIL_USE_SSL")
+
+if EMAIL_PORT == 465:
+    EMAIL_USE_TLS = _truthy(_env_tls) if _env_tls is not None else False
+    EMAIL_USE_SSL = _truthy(_env_ssl) if _env_ssl is not None else True
+else:
+    EMAIL_USE_TLS = _truthy(_env_tls) if _env_tls is not None else True
+    EMAIL_USE_SSL = _truthy(_env_ssl) if _env_ssl is not None else False
 
 # Gmail app passwords are 16 letters; Google UI shows spaces for readability
 # (e.g. 'xxxx xxxx xxxx xxxx'), but the actual password is 'xxxxxxxxxxxxxxxx'.
