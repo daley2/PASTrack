@@ -441,53 +441,20 @@ PASSWORD_RESET_TIMEOUT = 60 * 60 * 24
 DEFAULT_FROM_EMAIL = _env("DEFAULT_FROM_EMAIL", "no-reply@cebu.gov.ph")
 
 # Email Configuration
-_raw_email_host = _env("EMAIL_HOST", "smtp.gmail.com")
-_raw_port = _env("EMAIL_PORT", "587")
-EMAIL_PORT = int(_raw_port or "587")
+EMAIL_HOST = _env("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(_env("EMAIL_PORT", "587") or "587")
 EMAIL_HOST_USER = _env("EMAIL_HOST_USER", "")
-
-# Resolve EMAIL_HOST to IPv4 if requested (helps with Render/Vercel IPv6 issues)
-# DEFAULT: disabled for email because Gmail infrastructure is complex.
-EMAIL_HOST = _raw_email_host
-if _truthy(_env("LEGALTRACK_FORCE_IPV4_EMAIL", "false")):
-    try:
-        import socket
-        # Force IPv4 resolution
-        addr_infos = socket.getaddrinfo(
-            _raw_email_host, 
-            EMAIL_PORT,
-            family=socket.AF_INET, 
-            type=socket.SOCK_STREAM
-        )
-        if addr_infos:
-            EMAIL_HOST = addr_infos[0][4][0]
-            print(f"[DEBUG-IPv4-EMAIL] Resolved {_raw_email_host} to {EMAIL_HOST}", file=sys.stderr)
-    except Exception as e:
-        print(f"[DEBUG-IPv4-EMAIL] FAILED: {e}. Falling back to hostname.", file=sys.stderr)
-
-# Auto-detect SSL/TLS based on port if not explicitly set correctly
-_env_tls = _env("EMAIL_USE_TLS")
-_env_ssl = _env("EMAIL_USE_SSL")
-
-if EMAIL_PORT == 465:
-    EMAIL_USE_TLS = _truthy(_env_tls) if _env_tls is not None else False
-    EMAIL_USE_SSL = _truthy(_env_ssl) if _env_ssl is not None else True
-else:
-    EMAIL_USE_TLS = _truthy(_env_tls) if _env_tls is not None else True
-    EMAIL_USE_SSL = _truthy(_env_ssl) if _env_ssl is not None else False
-
-# Gmail app passwords are 16 letters; Google UI shows spaces for readability
+# Gmail/Brevo app passwords are 16 letters; Google UI shows spaces for readability
 # (e.g. 'xxxx xxxx xxxx xxxx'), but the actual password is 'xxxxxxxxxxxxxxxx'.
 # We strip all spaces here to prevent common copy-paste errors.
 EMAIL_HOST_PASSWORD = (_env("EMAIL_HOST_PASSWORD") or "").replace(" ", "").strip()
+EMAIL_USE_TLS = _truthy(_env("EMAIL_USE_TLS", "1"))
+EMAIL_USE_SSL = _truthy(_env("EMAIL_USE_SSL", "0"))
 EMAIL_TIMEOUT = 10
 
 if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
-    # Use custom backend that handles SSL/TLS certificates consistently
-    # This works for both Windows dev and Render/Vercel (Linux) production
+    # Custom backend to bypass Windows SSL cert issues, also works for Linux/Render.
     EMAIL_BACKEND = "core.email_backends.GmailEmailBackend"
-    EMAIL_USE_TLS = True
-    EMAIL_USE_SSL = False
 else:
     # Fallback to console for development
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
