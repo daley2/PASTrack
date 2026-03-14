@@ -1976,13 +1976,13 @@ def case_detail(request, tracking_id):
 
     can_submit_for_approval = (
         request.user.role == "capitol_examiner" and
-        case.status == "in_review" and
+        case.status in {"for_review", "under_review", "in_review"} and
         case.assigned_to_id == request.user.id
     )
 
     can_return_to_receiving = (
         request.user.role == "capitol_examiner" and
-        case.status == "in_review" and
+        case.status in {"for_review", "under_review", "in_review"} and
         case.assigned_to_id == request.user.id
     )
 
@@ -2016,7 +2016,7 @@ def case_detail(request, tracking_id):
         if role == "capitol_receiving":
             return case.status in {"not_received", "received"} and case.assigned_to_id is None
         if role == "capitol_examiner":
-            return case.status == "in_review" and case.assigned_to_id == user.id
+            return case.status in {"for_review", "under_review", "in_review"} and case.assigned_to_id == user.id
         if role == "capitol_approver":
             return case.status == "for_approval"
         if role == "capitol_numberer":

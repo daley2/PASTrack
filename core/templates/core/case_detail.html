@@ -128,7 +128,7 @@
     </div>
 {% endif %}
 
-{% if not can_edit %}
+{% if not can_edit and user.role == 'lgu_admin' %}
     <p class="muted" style="margin:0 0 16px 0;"><em>This case can no longer be edited.</em></p>
 {% endif %}
 
