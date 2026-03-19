@@ -58,7 +58,11 @@ class GmailEmailBackend(SMTPBackend):
 
             def ipv4_getaddrinfo(*args, **kwargs):
                 kwargs.pop("family", None)
-                return orig(*args, family=socket.AF_INET, **kwargs)
+                args_list = list(args)
+                if len(args_list) >= 3:
+                    args_list[2] = socket.AF_INET
+                    return orig(*args_list, **kwargs)
+                return orig(*args_list, family=socket.AF_INET, **kwargs)
 
             socket.getaddrinfo = ipv4_getaddrinfo  # type: ignore[assignment]
             try:
