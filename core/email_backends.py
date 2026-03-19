@@ -6,7 +6,6 @@ from __future__ import annotations
 import ssl
 import smtplib
 import socket
-import contextlib
 from typing import Any
 from django.core.mail.backends.smtp import EmailBackend as SMTPBackend
 from django.core.mail.backends.base import BaseEmailBackend
@@ -49,26 +48,18 @@ class GmailEmailBackend(SMTPBackend):
 
         force_ipv4 = bool(getattr(settings, "LEGALTRACK_EMAIL_FORCE_IPV4", False))
 
-        @contextlib.contextmanager
-        def _ipv4_only_dns(enabled: bool):
-            if not enabled:
-                yield
-                return
-            orig = socket.getaddrinfo
-
-            def ipv4_getaddrinfo(*args, **kwargs):
-                kwargs.pop("family", None)
-                args_list = list(args)
-                if len(args_list) >= 3:
-                    args_list[2] = socket.AF_INET
-                    return orig(*args_list, **kwargs)
-                return orig(*args_list, family=socket.AF_INET, **kwargs)
-
-            socket.getaddrinfo = ipv4_getaddrinfo  # type: ignore[assignment]
+        def _resolve_ipv4(hostname: str, p: int) -> str | None:
+            if not hostname:
+                return None
+            if all(c.isdigit() or c == "." for c in hostname):
+                return None
             try:
-                yield
-            finally:
-                socket.getaddrinfo = orig  # type: ignore[assignment]
+                infos = socket.getaddrinfo(hostname, p, family=socket.AF_INET, type=socket.SOCK_STREAM)
+                if infos:
+                    return infos[0][4][0]
+            except Exception:
+                return None
+            return None
 
         print(f"[SMTP-DEBUG] Attempting connection to {host}:{port}", file=sys.stderr)
         print(f"[SMTP-DEBUG] Current Settings: TLS={self.use_tls}, SSL={self.use_ssl}, ForceIPv4={force_ipv4}", file=sys.stderr)
@@ -83,10 +74,9 @@ class GmailEmailBackend(SMTPBackend):
             # Force SSL for port 465 (SMTP_SSL), STARTTLS for port 587 (SMTP)
             if self.port == 465:
                 print("[SMTP-DEBUG] Mode: SMTP_SSL", file=sys.stderr)
-                with _ipv4_only_dns(force_ipv4):
-                    self.connection = smtplib.SMTP_SSL(
-                        host, port, timeout=self.timeout, context=context
-                    )
+                self.connection = smtplib.SMTP_SSL(
+                    host, port, timeout=self.timeout, context=context
+                )
                 active_port = port
             else:
                 cand_ports: list[int] = [port] if port else []
@@ -101,9 +91,19 @@ class GmailEmailBackend(SMTPBackend):
                 for p in (cand_ports or [port]):
                     try:
                         print(f"[SMTP-DEBUG] Mode: Standard SMTP (port {p})", file=sys.stderr)
-                        with _ipv4_only_dns(force_ipv4):
-                            conn = smtplib.SMTP(timeout=self.timeout)
-                            conn.connect(host, p)
+                        connect_host = host
+                        if force_ipv4:
+                            resolved = _resolve_ipv4(host, p)
+                            if resolved:
+                                connect_host = resolved
+
+                        conn = smtplib.SMTP(timeout=self.timeout)
+                        conn.connect(connect_host, p)
+                        if connect_host != host:
+                            try:
+                                conn._host = host
+                            except Exception:
+                                pass
                         self.connection = conn
                         active_port = p
                         break
