@@ -450,7 +450,15 @@ EMAIL_HOST_USER = _env("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = (_env("EMAIL_HOST_PASSWORD") or "").replace(" ", "").strip()
 EMAIL_USE_TLS = _truthy(_env("EMAIL_USE_TLS", "1"))
 EMAIL_USE_SSL = _truthy(_env("EMAIL_USE_SSL", "0"))
-EMAIL_TIMEOUT = 10
+EMAIL_TIMEOUT = int(_env("EMAIL_TIMEOUT", "30" if not DEBUG else "10") or "10")
+
+# Some hosts (including Brevo) return both A and AAAA records; if the runtime
+# can't reach IPv6, SMTP connections may hang until timeout. Prefer IPv4 in prod.
+LEGALTRACK_EMAIL_FORCE_IPV4 = _truthy(_env("LEGALTRACK_EMAIL_FORCE_IPV4", "true" if not DEBUG else "false"))
+
+# In dev on some Windows setups, TLS verification can fail due to missing CAs.
+# Keep this OFF in production.
+LEGALTRACK_INSECURE_SMTP_TLS = _truthy(_env("LEGALTRACK_INSECURE_SMTP_TLS", "false"))
 
 # Email API providers (recommended for Vercel/serverless where SMTP is blocked)
 BREVO_API_KEY = _env("BREVO_API_KEY") or _env("SENDINBLUE_API_KEY") or ""

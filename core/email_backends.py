@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ssl
 import smtplib
+import socket
 from typing import Any
 from django.core.mail.backends.smtp import EmailBackend as SMTPBackend
 from django.core.mail.backends.base import BaseEmailBackend
@@ -42,33 +43,44 @@ class GmailEmailBackend(SMTPBackend):
             return False
 
         import sys
-        # Use self.host which is already set by the SMTPBackend from Django settings
-        print(f"[SMTP-DEBUG] Attempting connection to {self.host}:{self.port}", file=sys.stderr)
-        print(f"[SMTP-DEBUG] Current Settings: TLS={self.use_tls}, SSL={self.use_ssl}", file=sys.stderr)
+        host = self.host
+        port = int(self.port or 0)
+
+        force_ipv4 = bool(getattr(settings, "LEGALTRACK_EMAIL_FORCE_IPV4", False))
+        if force_ipv4:
+            try:
+                if host and "." in host and not all(c.isdigit() or c == "." for c in host):
+                    infos = socket.getaddrinfo(host, port, family=socket.AF_INET, type=socket.SOCK_STREAM)
+                    if infos:
+                        host = infos[0][4][0]
+            except Exception:
+                host = self.host
+
+        print(f"[SMTP-DEBUG] Attempting connection to {host}:{port}", file=sys.stderr)
+        print(f"[SMTP-DEBUG] Current Settings: TLS={self.use_tls}, SSL={self.use_ssl}, ForceIPv4={force_ipv4}", file=sys.stderr)
 
         try:
-            # Force SSL for port 465 (SMTP_SSL), STARTTLS for port 587 (SMTP)
-            if self.port == 465:
-                print(f"[SMTP-DEBUG] Mode: SMTP_SSL (cert verification DISABLED)", file=sys.stderr)
-                context = ssl.create_default_context()
+            insecure_tls = bool(getattr(settings, "LEGALTRACK_INSECURE_SMTP_TLS", False)) or bool(getattr(settings, "DEBUG", False))
+            context = ssl.create_default_context()
+            if insecure_tls:
                 context.check_hostname = False
                 context.verify_mode = ssl.CERT_NONE
-                
+
+            # Force SSL for port 465 (SMTP_SSL), STARTTLS for port 587 (SMTP)
+            if self.port == 465:
+                print("[SMTP-DEBUG] Mode: SMTP_SSL", file=sys.stderr)
                 self.connection = smtplib.SMTP_SSL(
-                    self.host, self.port, timeout=self.timeout, context=context
+                    host, port, timeout=self.timeout, context=context
                 )
             else:
-                print(f"[SMTP-DEBUG] Mode: Standard SMTP (STARTTLS if enabled)", file=sys.stderr)
+                print("[SMTP-DEBUG] Mode: Standard SMTP (STARTTLS if enabled)", file=sys.stderr)
                 self.connection = smtplib.SMTP(
-                    self.host, self.port, timeout=self.timeout
+                    host, port, timeout=self.timeout
                 )
 
             # For STARTTLS connections (usually port 587)
             if self.use_tls and self.port != 465:
-                print("[SMTP-DEBUG] Enabling STARTTLS (cert verification DISABLED)", file=sys.stderr)
-                context = ssl.create_default_context()
-                context.check_hostname = False
-                context.verify_mode = ssl.CERT_NONE
+                print("[SMTP-DEBUG] Enabling STARTTLS", file=sys.stderr)
                 self.connection.starttls(context=context)
 
             if self.username:
