@@ -97,7 +97,16 @@ class GmailEmailBackend(SMTPBackend):
                             if resolved:
                                 connect_host = resolved
 
-                        conn = smtplib.SMTP(timeout=self.timeout)
+                        per_attempt_timeout = self.timeout
+                        try:
+                            per_attempt_timeout = int(per_attempt_timeout) if per_attempt_timeout is not None else None
+                        except Exception:
+                            per_attempt_timeout = None
+                        if per_attempt_timeout is None:
+                            per_attempt_timeout = 8
+                        per_attempt_timeout = max(3, min(per_attempt_timeout, 10))
+
+                        conn = smtplib.SMTP(timeout=per_attempt_timeout)
                         conn.connect(connect_host, p)
                         if connect_host != host:
                             try:

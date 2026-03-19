@@ -450,7 +450,7 @@ EMAIL_HOST_USER = _env("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = (_env("EMAIL_HOST_PASSWORD") or "").replace(" ", "").strip()
 EMAIL_USE_TLS = _truthy(_env("EMAIL_USE_TLS", "1"))
 EMAIL_USE_SSL = _truthy(_env("EMAIL_USE_SSL", "0"))
-EMAIL_TIMEOUT = int(_env("EMAIL_TIMEOUT", "30" if not DEBUG else "10") or "10")
+EMAIL_TIMEOUT = int(_env("EMAIL_TIMEOUT", "8" if not DEBUG else "10") or "10")
 
 # Some hosts (including Brevo) return both A and AAAA records; if the runtime
 # can't reach IPv6, SMTP connections may hang until timeout. Prefer IPv4 in prod.

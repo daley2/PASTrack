@@ -9,7 +9,7 @@ services:
       pip install -r requirements.txt &&
       python manage.py collectstatic --noinput 2>&1 || true
 
-    startCommand: gunicorn legaltrack.wsgi:application --bind 0.0.0.0:$PORT
+    startCommand: gunicorn legaltrack.wsgi:application --bind 0.0.0.0:$PORT --timeout 120 --graceful-timeout 30
 
     envVars:
       - key: DJANGO_SETTINGS_MODULE
