@@ -1008,7 +1008,7 @@ def create_staff_account(request):
                 # We still created the user, but email failed. 
                 # The user_created.html template can show the link if LEGALTRACK_SHOW_ACTIVATION_LINK is True.
                 activation_link = f"Error sending email: {e}"
-                messages.warning(request, "User account created, but the activation email could not be sent. Please check SMTP logs.")
+                messages.warning(request, f"User account created, but activation email failed: {type(e).__name__}: {e}")
 
             activation_sent = bool(getattr(settings, "LEGALTRACK_SEND_EMAILS", True))
             show_activation_link = bool(getattr(settings, "LEGALTRACK_SHOW_ACTIVATION_LINK", False))
@@ -1170,7 +1170,7 @@ def resend_activation(request, user_id):
     except Exception as e:
         import sys
         print(f"[SMTP-RESEND-ERROR] FAILED: {e}", file=sys.stderr)
-        messages.error(request, "Failed to send activation email. Please check your SMTP settings.")
+        messages.error(request, f"Failed to send activation email: {type(e).__name__}: {e}")
         return redirect("user_management")
 
     activation_sent = bool(getattr(settings, "LEGALTRACK_SEND_EMAILS", True))

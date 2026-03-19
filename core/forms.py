@@ -92,8 +92,6 @@ class CaseDetailsForm(forms.ModelForm):
             self.add_error("client_first_name", "First name is required.")
         if not (cleaned.get("client_last_name") or "").strip():
             self.add_error("client_last_name", "Last name is required.")
-        if not (cleaned.get("area") or "").strip():
-            self.add_error("area", "Area is required.")
         if not (cleaned.get("case_type") or "").strip():
             self.add_error("case_type", "Type of case is required.")
 

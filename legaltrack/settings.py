@@ -452,6 +452,9 @@ EMAIL_USE_TLS = _truthy(_env("EMAIL_USE_TLS", "1"))
 EMAIL_USE_SSL = _truthy(_env("EMAIL_USE_SSL", "0"))
 EMAIL_TIMEOUT = 10
 
+# Email API providers (recommended for Vercel/serverless where SMTP is blocked)
+BREVO_API_KEY = _env("BREVO_API_KEY") or _env("SENDINBLUE_API_KEY") or ""
+
 # Log the email configuration for debugging in production (Render)
 if not DEBUG or _truthy(_env("LEGALTRACK_LOG_EMAIL_CONFIG")):
     print(f"[BOOT-DEBUG] Email Host: {EMAIL_HOST}", file=sys.stderr)
@@ -459,7 +462,9 @@ if not DEBUG or _truthy(_env("LEGALTRACK_LOG_EMAIL_CONFIG")):
     print(f"[BOOT-DEBUG] Email TLS: {EMAIL_USE_TLS}, SSL: {EMAIL_USE_SSL}", file=sys.stderr)
     print(f"[BOOT-DEBUG] Email User: {EMAIL_HOST_USER}", file=sys.stderr)
 
-if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
+if BREVO_API_KEY:
+    EMAIL_BACKEND = "core.email_backends.BrevoApiEmailBackend"
+elif EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
     # Custom backend to bypass Windows SSL cert issues, also works for Linux/Render.
     EMAIL_BACKEND = "core.email_backends.GmailEmailBackend"
 else:
