@@ -6,6 +6,9 @@
 <div class="card" style="text-align:center;">
     <h1 class="page-title">Request <span style="font-family:monospace;">{{ tracking }}</span> is <strong>{{ public_status }}</strong></h1>
     <p class="page-subtitle">Last updated: {{ updated_at|date:"M d, Y H:i" }}</p>
+    {% if show_internal_status %}
+        <p class="muted" style="margin:0 0 14px 0;">Internal Status: <strong>{{ internal_status }}</strong></p>
+    {% endif %}
 
     <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
         <a class="btn btn-secondary" href="{% url 'track_case' %}">Search Another</a>
@@ -39,6 +42,4 @@
         </table>
     </div>
 </div>
-
-<p class="muted" style="margin:0;">This page shows public status only. Internal remarks and staff details are not displayed.</p>
 {% endblock %}

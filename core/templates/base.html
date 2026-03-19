@@ -1,9 +1,10 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>LegalTrack – {% block title %}{% endblock %}</title>
+    <title>PAStrack – {% block title %}{% endblock %}</title>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <style>
         [x-cloak] { display: none !important; }
@@ -14,7 +15,8 @@
             --muted: #6b7280;
             --border: #e5e7eb;
             --border-strong: #d1d5db;
-            --primary: #111111;
+            --primary: #18134a;
+            --accent: #f7d400;
             --danger: #b42318;
         }
 
@@ -26,12 +28,11 @@
         .topbar {background:#fff; border-bottom:1px solid var(--border);}
         .topbar__inner {max-width:1100px; margin:0 auto; padding:12px 16px; display:flex; align-items:center; gap:14px; flex-wrap:nowrap;}
         .brand {display:flex; align-items:center; gap:10px; font-weight:700;}
-        .brand__mark {width:18px; height:18px; border-radius:4px; background:var(--primary); display:inline-block;}
-        .brand__text {letter-spacing:.2px;}
+        .brand__logo {height:28px; width:auto; display:block;}
 
         .navpills {display:flex; gap:8px; align-items:center; flex-wrap:nowrap; justify-content:center; flex:1; min-width:0; margin:0 auto; white-space:nowrap;}
         .navpills a {padding:7px 12px; border-radius:10px; border:1px solid transparent; font-weight:700; font-size:0.92rem; color:var(--muted);}
-        .navpills a.active {background:var(--primary); color:#fff; text-decoration:none;}
+        .navpills a.active {background:var(--primary); color:var(--accent); text-decoration:none;}
         .navpills a:hover,
         .navpills a:focus-visible {text-decoration:none; background:var(--primary); border-color:var(--primary); color:#fff; outline:none;}
 
@@ -53,7 +54,10 @@
 
         .btn {display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 14px; border-radius:10px; border:1px solid var(--border-strong); background:#fff; cursor:pointer; font-weight:700;}
         .btn-primary {background:var(--primary); color:#fff; border-color:var(--primary);}
+        .btn-primary:hover {background:#120d3b; border-color:#120d3b;}
         .btn-secondary {background:#fff; color:var(--text);}
+        .btn-success {background:#067647; color:#fff; border-color:#067647;}
+        .btn-success:hover {background:#05603a; border-color:#05603a;}
         .btn-danger {background:var(--danger); color:#fff; border-color:var(--danger);}
         .btn-sm {padding:7px 10px; border-radius:9px; font-weight:700; font-size:0.9rem;}
         .btn:disabled {opacity:.55; cursor:not-allowed;}
@@ -147,7 +151,7 @@
 
         .pagination {display:flex; justify-content:center; gap:8px; padding:14px 12px; border-top:1px solid var(--border);}
         .pagepill {min-width:34px; height:34px; display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:10px; color:var(--muted); font-weight:700; padding:0 10px;}
-        .pagepill.active {background:var(--primary); color:#fff; border-color:var(--primary);}
+        .pagepill.active {background:var(--primary); color:var(--accent); border-color:var(--primary);}
         .pagepill:hover {text-decoration:none; color:var(--text);}
 
         @media (max-width: 900px) {
@@ -165,8 +169,7 @@
     <header class="topbar">
         <div class="topbar__inner">
             <a class="brand" href="{% url 'landing' %}">
-                <span class="brand__mark" aria-hidden="true"></span>
-                <span class="brand__text">LegalTrack</span>
+                <img class="brand__logo" src="{% static 'core/PAStrackLOGO.png' %}" alt="PAStrack" />
             </a>
 
             {% if user.is_authenticated %}

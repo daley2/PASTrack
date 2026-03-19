@@ -152,11 +152,10 @@ def _public_status_label(case: Case) -> str:
     mapping = {
         "not_received": "Pending",
         "received": "Received",
-        "for_review": "Received",
-        "under_review": "Under Review",
-        "for_approval": "For Approval",
+        "in_review": "Reviewed",
+        "for_approval": "Approved",
         "approved": "Approved",
-        "for_numbering": "For Numbering",
+        "for_numbering": "Numbered",
         "for_release": "For Release",
         "released": "Released",
         "client_correction": "Returned to Client (Correction Window)",
@@ -188,16 +187,11 @@ def _build_public_timeline(case: Case) -> list[dict[str, object]]:
 
     for h in history_qs:
         action = getattr(h, "action", "")
-        if action in {"case_remark", "login", "login_failed", "logout", "create_user", "update_user"}:
-            continue
-
         if action == "case_receipt":
             if not physically_received_added:
                 add("Physically Received", h.created_at)
                 physically_received_added = True
             continue
-
-        # Prefer status transitions; keep labels public-friendly.
         if action in {"case_status_change", "case_approval", "case_rejection", "case_release"}:
             details = getattr(h, "details", {}) or {}
             new_status = None
@@ -214,13 +208,7 @@ def _build_public_timeline(case: Case) -> list[dict[str, object]]:
 
                 label = _public_status_label(type("obj", (), {"status": new_status})())
                 add(f"Status: {label}", h.created_at)
-            else:
-                add("Status Updated", h.created_at)
-        elif action == "case_assignment":
-            add("Assigned for Review", h.created_at)
-        elif action == "case_create":
-            # Already added from case.created_at, but audit log might be more precise for timeline
-            pass
+            continue
 
     # Add current status if not already reflected (though audit logs should cover it)
     # But for a cleaner timeline, we trust the audit logs for transitions.
@@ -260,17 +248,11 @@ def track_case_detail(request, tracking_id: str):
     if not case:
         return render(request, "core/track_not_found.html", {"tracking": tracking}, status=404)
 
-    user = request.user
-    if user.is_authenticated and user.role == "capitol_examiner":
-        if case.status == "for_review" and case.assigned_to_id == user.id:
-            case.status = "under_review"
-            case.save(update_fields=["status", "updated_at"])
-            AuditLog.objects.create(
-                actor=user,
-                action="case_status_change",
-                target_object=f"Case: {case.tracking_id}",
-                details={"old_status": "for_review", "new_status": "under_review", "reason": "Case opened by examiner"}
-            )
+    show_internal_status = bool(
+        request.user.is_authenticated
+        and (_is_capitol_staff(request.user) or getattr(request.user, "role", "") == "super_admin")
+    )
+    internal_status = dict(Case.STATUS_CHOICES).get(getattr(case, "status", ""), getattr(case, "status", ""))
 
     public_status = _public_status_label(case)
     timeline = _build_public_timeline(case)
@@ -279,6 +261,8 @@ def track_case_detail(request, tracking_id: str):
     return render(request, "core/track_case_detail.html", {
         "tracking": case.tracking_id,
         "public_status": public_status,
+        "internal_status": internal_status,
+        "show_internal_status": show_internal_status,
         "updated_at": case.updated_at,
         "timeline": timeline,
     })
@@ -500,6 +484,23 @@ def _user_can_view_case(user: CustomUser, case: Case) -> bool:
     return False
 
 
+def _user_is_current_owner_for_internal_sections(user: CustomUser, case: Case) -> bool:
+    role = getattr(user, "role", "") or ""
+    if role == "super_admin":
+        return True
+    if role == "capitol_receiving":
+        return getattr(case, "status", "") in {"not_received", "received"} and getattr(case, "assigned_to_id", None) is None
+    if role == "capitol_examiner":
+        return getattr(case, "status", "") in {"for_review", "under_review", "in_review"} and getattr(case, "assigned_to_id", None) == getattr(user, "id", None)
+    if role == "capitol_approver":
+        return getattr(case, "status", "") == "for_approval"
+    if role == "capitol_numberer":
+        return getattr(case, "status", "") == "for_numbering"
+    if role == "capitol_releaser":
+        return getattr(case, "status", "") == "for_release"
+    return False
+
+
 @login_required
 def download_case_document(request, doc_id: int):
     doc = get_object_or_404(CaseDocument.objects.select_related("case"), id=doc_id)
@@ -509,12 +510,128 @@ def download_case_document(request, doc_id: int):
         raise Http404()
 
     filename = os.path.basename(doc.file.name or "document")
-    response = FileResponse(doc.file.open("rb"), as_attachment=False, filename=filename)
+    try:
+        fh = doc.file.open("rb")
+    except (FileNotFoundError, OSError, ValueError):
+        raise Http404()
+
+    response = FileResponse(fh, as_attachment=False, filename=filename)
     guessed, _ = mimetypes.guess_type(filename)
     if guessed:
         response["Content-Type"] = guessed
     response["X-Content-Type-Options"] = "nosniff"
     return response
+
+
+@login_required
+@require_POST
+def review_case_document(request, doc_id: int):
+    doc = get_object_or_404(CaseDocument.objects.select_related("case"), id=doc_id)
+    case = doc.case
+    if not _user_can_view_case(request.user, case):
+        raise Http404()
+    if not _user_is_current_owner_for_internal_sections(request.user, case):
+        messages.error(request, "Not authorized to review documents for this case right now.")
+        return redirect("case_detail", tracking_id=case.tracking_id)
+
+    ok_raw = (request.POST.get("reviewed_ok") or "").strip().lower()
+    reviewed_ok = ok_raw in {"1", "true", "yes", "y", "on"}
+    review_remark = (request.POST.get("review_remark") or "").strip()
+
+    now = timezone.now()
+    has_review_payload = bool(reviewed_ok or review_remark)
+
+    if not has_review_payload:
+        reviewed_ok = False
+        review_remark = ""
+        doc.reviewed_by = None
+        doc.reviewed_at = None
+    else:
+        doc.reviewed_by = request.user
+        doc.reviewed_at = now
+
+    doc.reviewed_ok = reviewed_ok
+    doc.review_remark = review_remark if (review_remark or not reviewed_ok) else ""
+    doc.save(update_fields=["reviewed_ok", "review_remark", "reviewed_by", "reviewed_at", "updated_at"])
+
+    AuditLog.objects.create(
+        actor=request.user,
+        action="case_document_review",
+        target_object=f"Case: {case.tracking_id}",
+        details={"document": doc.doc_type, "checked": reviewed_ok, "remark": review_remark[:2000]},
+    )
+
+    messages.success(request, "Document review saved.")
+    return redirect("case_detail", tracking_id=case.tracking_id)
+
+
+@login_required
+@require_POST
+def review_case_documents(request, tracking_id: str):
+    case = get_object_or_404(Case, tracking_id=tracking_id)
+    if not _user_can_view_case(request.user, case):
+        raise Http404()
+    if not _user_is_current_owner_for_internal_sections(request.user, case):
+        messages.error(request, "Not authorized to review documents for this case right now.")
+        return redirect("case_detail", tracking_id=case.tracking_id)
+
+    raw_ids = request.POST.getlist("doc_id") or []
+    doc_ids: list[int] = []
+    for v in raw_ids:
+        if str(v).isdigit():
+            doc_ids.append(int(v))
+    if not doc_ids:
+        messages.error(request, "No documents to save.")
+        return redirect("case_detail", tracking_id=case.tracking_id)
+
+    docs = list(CaseDocument.objects.filter(case=case, id__in=doc_ids).order_by("id"))
+    by_id = {d.id: d for d in docs}
+    missing = [i for i in doc_ids if i not in by_id]
+    if missing:
+        raise Http404()
+
+    updates: list[dict[str, object]] = []
+    now = timezone.now()
+
+    with transaction.atomic():
+        for doc in docs:
+            reviewed_ok = (request.POST.get(f"reviewed_ok_{doc.id}") or "").strip() == "1"
+            review_remark = (request.POST.get(f"review_remark_{doc.id}") or "").strip()
+            has_review_payload = bool(reviewed_ok or review_remark)
+
+            new_reviewed_ok = reviewed_ok
+            new_review_remark = review_remark if (review_remark or not reviewed_ok) else ""
+
+            if not has_review_payload:
+                new_reviewed_ok = False
+                new_review_remark = ""
+
+            if (
+                doc.reviewed_ok == new_reviewed_ok
+                and (doc.review_remark or "") == new_review_remark
+                and (doc.reviewed_by_id is None) == (not has_review_payload)
+                and (doc.reviewed_at is None) == (not has_review_payload)
+            ):
+                continue
+
+            doc.reviewed_ok = new_reviewed_ok
+            doc.review_remark = new_review_remark
+            doc.reviewed_by = None if not has_review_payload else request.user
+            doc.reviewed_at = None if not has_review_payload else now
+            doc.save(update_fields=["reviewed_ok", "review_remark", "reviewed_by", "reviewed_at", "updated_at"])
+
+            updates.append({"document": doc.doc_type, "checked": new_reviewed_ok, "remark": new_review_remark[:500]})
+
+    if updates:
+        AuditLog.objects.create(
+            actor=request.user,
+            action="case_document_review",
+            target_object=f"Case: {case.tracking_id}",
+            details={"documents": updates[:50]},
+        )
+
+    messages.success(request, "Documents saved.")
+    return redirect("case_detail", tracking_id=case.tracking_id)
 
 
 def _format_audit_details(details) -> str:
@@ -558,6 +675,60 @@ def _format_audit_details(details) -> str:
         return "\n".join(lines) if lines else "—"
 
     return str(details)
+
+
+def _format_case_history_details(action: str, details) -> str:
+    if details is None or details == "":
+        details_obj: object = {}
+    elif isinstance(details, dict):
+        details_obj = details
+    elif isinstance(details, str):
+        s = details.strip()
+        if not s:
+            details_obj = {}
+        else:
+            try:
+                details_obj = json.loads(s)
+            except Exception:
+                details_obj = {"details": s}
+    else:
+        details_obj = {"details": str(details)}
+
+    d = details_obj if isinstance(details_obj, dict) else {}
+    parts: list[str] = []
+
+    if action == "case_assignment":
+        assigned_to = (d.get("assigned_to") or "").strip() if isinstance(d.get("assigned_to"), str) else d.get("assigned_to")
+        if assigned_to:
+            parts.append(f"Assigned to: {assigned_to}")
+    elif action in {"case_receipt"}:
+        new_status = d.get("new_status")
+        if new_status:
+            status_label = dict(Case.STATUS_CHOICES).get(str(new_status), str(new_status))
+            parts.append(f"Status: {status_label}")
+    elif action in {"case_status_change", "case_approval", "case_rejection", "case_release"}:
+        new_status = d.get("new_status")
+        if new_status:
+            status_label = dict(Case.STATUS_CHOICES).get(str(new_status), str(new_status))
+            parts.append(f"Status: {status_label}")
+
+        nums = d.get("numbers")
+        if isinstance(nums, list) and nums:
+            parts.append(f"Numbers: {', '.join(str(n) for n in nums)}")
+
+        reason = d.get("reason")
+        if isinstance(reason, str) and reason.strip():
+            parts.append(f"Reason: {reason.strip()}")
+
+        returned_to = d.get("returned_to")
+        if isinstance(returned_to, str) and returned_to.strip():
+            parts.append(f"Returned to: {returned_to.strip()}")
+    else:
+        extra = _format_audit_details(details)
+        if extra and extra != "—":
+            parts.append(extra)
+
+    return "\n".join(parts) if parts else "—"
 
 @login_required
 def dashboard(request):
@@ -627,7 +798,7 @@ def dashboard(request):
         if user.role == "capitol_receiving":
             tab = (request.GET.get("tab") or "").strip().lower() or "pending"
             pending_qs = Case.objects.filter(status="not_received").order_by("-created_at")
-            received_qs = Case.objects.filter(status__in={"received", "under_review"}, assigned_to__isnull=True).order_by("-received_at")
+            received_qs = Case.objects.filter(status="received", assigned_to__isnull=True).order_by("-received_at")
 
             pending_count = pending_qs.count()
             received_count = received_qs.count()
@@ -646,7 +817,7 @@ def dashboard(request):
             })
 
         elif user.role == "capitol_examiner":
-            my_cases = Case.objects.filter(assigned_to=user, status__in={"for_review", "under_review"}).order_by("-assigned_at")[:50]
+            my_cases = Case.objects.filter(assigned_to=user, status__in={"in_review", "for_review", "under_review"}).order_by("-assigned_at")[:50]
             context.update({"my_cases": my_cases})
 
         elif user.role == "capitol_approver":
@@ -929,6 +1100,7 @@ def toggle_staff_active(request, user_id):
 
     if target.account_status == "active":
         target.account_status = "inactive"
+        target.is_active = False
         target.save(update_fields=["account_status", "is_active"])
 
         AuditLog.objects.create(
@@ -947,11 +1119,13 @@ def toggle_staff_active(request, user_id):
         # If never activated, restore to pending and require activation link.
         if target.activated_at is None:
             target.account_status = "pending"
+            target.is_active = False
             target.save(update_fields=["account_status", "is_active"])
             messages.info(request, "Account restored to Pending Activation. Use Resend Activation to onboard the user.")
             return redirect("user_management")
 
         target.account_status = "active"
+        target.is_active = True
         target.save(update_fields=["account_status", "is_active"])
 
         AuditLog.objects.create(
@@ -1082,7 +1256,7 @@ def forgot_password(request):
             user.password_reset_code_created_at = timezone.now()
             user.save(update_fields=["password_reset_code", "password_reset_code_created_at"])
             
-            subject = "LegalTrack Password Reset Code"
+            subject = "PAStrack Password Reset Code"
             message = f"Your password reset code is: {code}\n\nThis code will expire in 15 minutes."
             
             try:
@@ -2037,13 +2211,14 @@ def case_detail(request, tracking_id):
         remarks_qs = CaseRemark.objects.filter(case=case).select_related("created_by")
         history_qs = (
             AuditLog.objects.filter(target_object=f"Case: {case.tracking_id}")
+            .filter(action__in=["case_create", "case_receipt", "case_assignment", "case_status_change", "case_approval", "case_rejection", "case_release"])
             .select_related("actor")
             .order_by("-created_at")
         )
 
         history = list(history_qs)
         for h in history:
-            h.details_display = _format_audit_details(getattr(h, "details", None))
+            h.details_display = _format_case_history_details(getattr(h, "action", "") or "", getattr(h, "details", None))
 
         remarks = list(remarks_qs)
 
@@ -2160,7 +2335,7 @@ def submissions(request):
         "all": None,
         "pending": {"not_received", "client_correction"},
         "received": {"received"},
-        "under_review": {"for_review", "under_review"},
+        "in_review": {"in_review", "for_review", "under_review"},
         "for_approval": {"for_approval"},
         "for_numbering": {"for_numbering"},
         "for_release": {"for_release"},
@@ -2215,7 +2390,7 @@ def submissions(request):
         ("all", "All"),
         ("pending", "Pending"),
         ("received", "Received"),
-        ("under_review", "Under Review"),
+        ("in_review", "In Review"),
         ("for_approval", "For Approval"),
         ("for_numbering", "For Numbering"),
         ("for_release", "For Release"),
@@ -2266,7 +2441,7 @@ def receive_case(request, tracking_id):
 
     send_case_email(
         to_email=(case.client_email or "").strip(),
-        subject=f"LegalTrack: Case {case.tracking_id} received",
+        subject=f"PAStrack: Case {case.tracking_id} received",
         message=(
             f"Your request {case.tracking_id} has been marked as physically received.\n\n"
             f"Current status: {dict(Case.STATUS_CHOICES).get(case.status, case.status)}\n"
@@ -2300,6 +2475,10 @@ def return_case(request, tracking_id):
         messages.error(request, "Return reason is required.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
+    if case.documents.exists() and case.documents.filter(reviewed_ok=False, review_remark="").exists():
+        messages.error(request, "Add remarks to unchecked documents before returning to the client.")
+        return redirect("case_detail", tracking_id=case.tracking_id)
+
     case.status = "client_correction"
     case.return_reason = reason
     case.returned_at = timezone.now()
@@ -2323,7 +2502,7 @@ def return_case(request, tracking_id):
 
     email_ok = send_case_email(
         to_email=(case.client_email or "").strip(),
-        subject=f"LegalTrack: Action needed for case {case.tracking_id}",
+        subject=f"PAStrack: Action needed for case {case.tracking_id}",
         message=(
             f"Your request {case.tracking_id} was returned for correction.\n\n"
             f"Reason: {reason}\n"
@@ -2364,7 +2543,7 @@ def assign_case(request, tracking_id):
 
     case.assigned_to = examiner
     case.assigned_at = timezone.now()
-    case.status = "for_review"
+    case.status = "in_review"
     case.save()
 
     AuditLog.objects.create(
@@ -2390,8 +2569,12 @@ def submit_for_approval(request, tracking_id):
         messages.error(request, "Only Examiners can submit cases for approval.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
-    if case.status not in {"for_review", "under_review"} or case.assigned_to_id != request.user.id:
+    if case.status not in {"in_review", "for_review", "under_review"} or case.assigned_to_id != request.user.id:
         messages.error(request, "This case is not eligible for approval submission.")
+        return redirect("case_detail", tracking_id=case.tracking_id)
+
+    if case.documents.exists() and case.documents.filter(reviewed_ok=False).exists():
+        messages.error(request, "Review all uploaded documents and mark them as checked before submitting for approval.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
     old_status = case.status
@@ -2422,6 +2605,10 @@ def approve_case(request, tracking_id):
         messages.error(request, "This case is not eligible for approval.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
+    if case.documents.exists() and case.documents.filter(reviewed_ok=False).exists():
+        messages.error(request, "Review all uploaded documents and mark them as checked before approving.")
+        return redirect("case_detail", tracking_id=case.tracking_id)
+
     old_status = case.status
     case.status = "for_numbering"
     case.save(update_fields=["status", "updated_at"])
@@ -2435,7 +2622,7 @@ def approve_case(request, tracking_id):
 
     send_case_email(
         to_email=(case.client_email or "").strip(),
-        subject=f"LegalTrack: Case {case.tracking_id} approved",
+        subject=f"PAStrack: Case {case.tracking_id} approved",
         message=(
             f"Your request {case.tracking_id} has been approved.\n\n"
             f"Current status: {dict(Case.STATUS_CHOICES).get(case.status, case.status)}\n"
@@ -2470,7 +2657,7 @@ def return_for_correction(request, tracking_id):
         return redirect("case_detail", tracking_id=case.tracking_id)
 
     old_status = case.status
-    case.status = "under_review"
+    case.status = "in_review"
     case.return_reason = reason
     case.returned_at = timezone.now()
     case.returned_by = request.user
@@ -2507,7 +2694,7 @@ def return_to_receiving(request, tracking_id):
         messages.error(request, "Only Examiners can return cases to Receiving.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
-    if case.status not in {"for_review", "under_review"} or case.assigned_to_id != request.user.id:
+    if case.status not in {"in_review", "for_review", "under_review"} or case.assigned_to_id != request.user.id:
         messages.error(request, "This case is not eligible for return to Receiving.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
@@ -2517,13 +2704,10 @@ def return_to_receiving(request, tracking_id):
         return redirect("case_detail", tracking_id=case.tracking_id)
 
     old_status = case.status
-    case.status = "under_review"  # Changed from "received" to "under_review" as per request
+    case.status = "received"
     case.return_reason = reason
     case.returned_at = timezone.now()
     case.returned_by = request.user
-    # Keep the assignment so the examiner can still see it in 'under_review'? 
-    # Or should it go back to receiving? The prompt says "if the case is return from examiner to receiver. Change status 'Received' to 'Under review'."
-    # This implies the status becomes 'Under review' when it goes back to the receiver.
     case.assigned_to = None
     case.assigned_at = None
     case.save(update_fields=[
@@ -2563,6 +2747,10 @@ def mark_numbered(request, tracking_id):
 
     if case.status != "for_numbering":
         messages.error(request, "This case is not eligible for numbering.")
+        return redirect("case_detail", tracking_id=case.tracking_id)
+
+    if case.documents.exists() and case.documents.filter(reviewed_ok=False).exists():
+        messages.error(request, "Review all uploaded documents and mark them as checked before numbering.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
     def parse_numbers(raw: str) -> list[int]:
@@ -2606,10 +2794,6 @@ def mark_numbered(request, tracking_id):
         messages.error(request, str(exc))
         return redirect("case_detail", tracking_id=case.tracking_id)
 
-    if (request.POST.get("finalize_confirm") or "").strip() != "1":
-        messages.error(request, "Finalize confirmation is required.")
-        return redirect("case_detail", tracking_id=case.tracking_id)
-
     last_used = CaseNumber.objects.order_by("-number").values_list("number", flat=True).first() or 0
 
     with transaction.atomic():
@@ -2632,11 +2816,6 @@ def mark_numbered(request, tracking_id):
     if not final_numbers:
         messages.error(request, "At least one number is required.")
         return redirect("case_detail", tracking_id=case.tracking_id)
-
-    if any(n > int(last_used) + 1 for n in final_numbers):
-        if (request.POST.get("confirm_sequence") or "").strip() != "1":
-            messages.error(request, f"Sequence jump detected (Last used was {last_used}). Please check the 'Confirm non-sequential numbering' box to proceed.")
-            return redirect("case_detail", tracking_id=case.tracking_id)
 
     old_status = case.status
     case.status = "for_release"
@@ -2666,6 +2845,10 @@ def release_case(request, tracking_id):
         messages.error(request, "This case is not eligible for release.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
+    if case.documents.exists() and case.documents.filter(reviewed_ok=False).exists():
+        messages.error(request, "Review all uploaded documents and mark them as checked before releasing.")
+        return redirect("case_detail", tracking_id=case.tracking_id)
+
     old_status = case.status
     case.status = "released"
     case.released_at = timezone.now()
@@ -2680,7 +2863,7 @@ def release_case(request, tracking_id):
 
     send_case_email(
         to_email=(case.client_email or "").strip(),
-        subject=f"LegalTrack: Case {case.tracking_id} released",
+        subject=f"PAStrack: Case {case.tracking_id} released",
         message=(
             f"Your request {case.tracking_id} has been released.\n\n"
             f"Current status: {dict(Case.STATUS_CHOICES).get(case.status, case.status)}\n"

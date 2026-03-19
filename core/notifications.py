@@ -60,15 +60,15 @@ def sns_hook(*, event: str, payload: dict[str, Any]) -> bool:
 
     # Minimal event -> message mapping.
     if event == "case_returned_to_client":
-        msg = f"LegalTrack: {tracking_id} returned for correction. Deadline: {deadline}"
+        msg = f"PAStrack: {tracking_id} returned for correction. Deadline: {deadline}"
     elif event == "case_received":
-        msg = f"LegalTrack: {tracking_id} marked as received."
+        msg = f"PAStrack: {tracking_id} marked as received."
     elif event == "case_approved":
-        msg = f"LegalTrack: {tracking_id} approved."
+        msg = f"PAStrack: {tracking_id} approved."
     elif event == "case_released":
-        msg = f"LegalTrack: {tracking_id} released."
+        msg = f"PAStrack: {tracking_id} released."
     else:
-        msg = f"LegalTrack update: {tracking_id}"
+        msg = f"PAStrack update: {tracking_id}"
 
     # Textbelt expects form-encoded POST.
     import json

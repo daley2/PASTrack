@@ -46,7 +46,7 @@ export default function Shell() {
             <header className="border-b border-slate-200 bg-white">
                 <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
                     <Link to="/dashboard" className="text-sm font-semibold text-slate-900">
-                        LegalTrack
+                        PAStrack
                     </Link>
                     <nav className="flex items-center gap-1">
                         <NavItem to="/dashboard" label="Dashboard" />

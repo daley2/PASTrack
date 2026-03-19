@@ -100,30 +100,72 @@
 
 {% if documents %}
     <div class="card card--flat">
-        <div class="card__header">
+        <div class="card__header" style="display:flex; justify-content:space-between; align-items:center;">
             <strong>Uploaded Documents</strong>
+            {% if show_internal %}
+                <button form="doc-review-form" class="btn btn-primary btn-sm" type="submit">Save</button>
+            {% endif %}
         </div>
         <div class="card__body card__body--flush">
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Document Type</th>
-                        <th>File</th>
-                        <th style="width:14%">View File</th>
-                        <th style="width:22%">Uploaded</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for doc in documents %}
+            {% if show_internal %}
+                <form id="doc-review-form" method="post" action="{% url 'review_case_documents' case.tracking_id %}" style="margin:0;">
+                    {% csrf_token %}
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Document Type</th>
+                                <th>File</th>
+                                <th style="width:14%">View File</th>
+                                <th style="width:22%">Uploaded</th>
+                                <th style="width:42%">Review</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for doc in documents %}
+                                <tr>
+                                    <td>{{ doc.doc_type }}</td>
+                                    <td class="muted">{{ doc.file.name|cut:"cases/" }}</td>
+                                    <td><a class="btn btn-secondary btn-sm" href="{% url 'download_case_document' doc.id %}" target="_blank" rel="noopener">View</a></td>
+                                    <td class="muted">{{ doc.uploaded_at|date:"M d, Y H:i" }}</td>
+                                    <td>
+                                        <input type="hidden" name="doc_id" value="{{ doc.id }}" />
+                                        <div style="display:flex; gap:10px; align-items:flex-start; flex-wrap:wrap;">
+                                            <label style="display:flex; align-items:center; gap:8px; margin:0;">
+                                                <input type="checkbox" name="reviewed_ok_{{ doc.id }}" value="1" {% if doc.reviewed_ok %}checked{% endif %} style="width:auto;" />
+                                                <span class="muted">Checked / OK</span>
+                                            </label>
+                                            <div style="flex:1; min-width:260px;">
+                                                <textarea name="review_remark_{{ doc.id }}" rows="2" placeholder="If not OK, explain what’s wrong...">{{ doc.review_remark|default:"" }}</textarea>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </form>
+            {% else %}
+                <table class="table">
+                    <thead>
                         <tr>
-                            <td>{{ doc.doc_type }}</td>
-                            <td class="muted">{{ doc.file.name|cut:"cases/" }}</td>
-                            <td><a class="btn btn-secondary btn-sm" href="{% url 'download_case_document' doc.id %}" target="_blank" rel="noopener">View</a></td>
-                            <td class="muted">{{ doc.uploaded_at|date:"M d, Y H:i" }}</td>
+                            <th>Document Type</th>
+                            <th>File</th>
+                            <th style="width:14%">View File</th>
+                            <th style="width:22%">Uploaded</th>
                         </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        {% for doc in documents %}
+                            <tr>
+                                <td>{{ doc.doc_type }}</td>
+                                <td class="muted">{{ doc.file.name|cut:"cases/" }}</td>
+                                <td><a class="btn btn-secondary btn-sm" href="{% url 'download_case_document' doc.id %}" target="_blank" rel="noopener">View</a></td>
+                                <td class="muted">{{ doc.uploaded_at|date:"M d, Y H:i" }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% endif %}
         </div>
     </div>
 {% endif %}
@@ -133,20 +175,20 @@
 {% endif %}
 
 {% if can_receive %}
-    <form method="post" action="{% url 'receive_case' case.tracking_id %}" class="card">
+    <form method="post" action="{% url 'receive_case' case.tracking_id %}" class="card" data-confirm-unsaved-doc-review="1">
         {% csrf_token %}
         <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
             <div>
                 <strong>Capitol Receiving</strong>
                 <div class="muted">Mark this request as physically received.</div>
             </div>
-            <button class="btn btn-primary" type="submit">Mark as Received</button>
+            <button class="btn btn-success" type="submit">Mark as Received</button>
         </div>
     </form>
 {% endif %}
 
 {% if can_return %}
-    <form method="post" action="{% url 'return_case' case.tracking_id %}" class="card">
+    <form method="post" action="{% url 'return_case' case.tracking_id %}" class="card" data-confirm-unsaved-doc-review="1">
         {% csrf_token %}
         <label for="id_reason">Return Reason</label>
         <textarea id="id_reason" name="reason" rows="3" placeholder="State what needs correction..."></textarea>
@@ -157,7 +199,7 @@
 {% endif %}
 
 {% if can_assign %}
-    <form method="post" action="{% url 'assign_case' case.tracking_id %}" class="card">
+    <form method="post" action="{% url 'assign_case' case.tracking_id %}" class="card" data-confirm-unsaved-doc-review="1">
         {% csrf_token %}
 
         <label for="id_examiner">Assign to Examiner</label>
@@ -222,7 +264,7 @@
 {# Case history moved to the bottom so action controls appear above it #}
 
 {% if can_submit_for_approval %}
-    <form method="post" action="{% url 'submit_for_approval' case.tracking_id %}" class="card">
+    <form method="post" action="{% url 'submit_for_approval' case.tracking_id %}" class="card" data-confirm-unsaved-doc-review="1">
         {% csrf_token %}
         <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
             <div>
@@ -235,7 +277,7 @@
 {% endif %}
 
 {% if can_return_to_receiving %}
-    <form method="post" action="{% url 'return_to_receiving' case.tracking_id %}" class="card">
+    <form method="post" action="{% url 'return_to_receiving' case.tracking_id %}" class="card" data-confirm-unsaved-doc-review="1">
         {% csrf_token %}
         <label for="id_examiner_reason">Return Reason</label>
         <textarea id="id_examiner_reason" name="reason" rows="3" placeholder="State what needs correction...">{{ case.return_reason|default:"" }}</textarea>
@@ -246,7 +288,7 @@
 {% endif %}
 
 {% if can_approve %}
-    <form method="post" action="{% url 'approve_case' case.tracking_id %}" class="card">
+    <form method="post" action="{% url 'approve_case' case.tracking_id %}" class="card" data-confirm-unsaved-doc-review="1">
         {% csrf_token %}
         <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
             <div>
@@ -257,7 +299,7 @@
         </div>
     </form>
 
-    <form method="post" action="{% url 'return_for_correction' case.tracking_id %}" class="card">
+    <form method="post" action="{% url 'return_for_correction' case.tracking_id %}" class="card" data-confirm-unsaved-doc-review="1">
         {% csrf_token %}
         <label for="id_approver_reason">Return Reason</label>
         <textarea id="id_approver_reason" name="reason" rows="3" placeholder="State what needs correction..."></textarea>
@@ -268,7 +310,7 @@
 {% endif %}
 
 {% if can_number %}
-    <form method="post" action="{% url 'mark_numbered' case.tracking_id %}" class="card">
+    <form method="post" action="{% url 'mark_numbered' case.tracking_id %}" class="card" data-confirm-unsaved-doc-review="1">
         {% csrf_token %}
         <strong>Numbering</strong>
         <div class="muted" style="margin:6px 0 10px 0;">
@@ -294,11 +336,6 @@
         <label for="id_numbers">Add numbers</label>
         <textarea id="id_numbers" name="numbers" rows="2" placeholder="e.g. {{ suggested_next_number }}, {{ suggested_next_number|add:'1' }}">{{ suggested_next_number }}</textarea>
         
-        <label style="display:flex; align-items:flex-start; gap:10px; margin-top:12px;">
-            <input type="checkbox" name="confirm_sequence" value="1" style="width:auto; margin-top:3px;" />
-            <span class="muted">Confirm non-sequential numbering (if adding a number that isn't next in line).</span>
-        </label>
-
         <label style="display:flex; align-items:flex-start; gap:10px; margin-top:12px; margin-bottom:12px;">
             <input type="checkbox" name="finalize_confirm" value="1" required style="width:auto; margin-top:3px;" />
             <span class="muted">
@@ -317,7 +354,7 @@
 {% endif %}
 
 {% if can_release %}
-    <form method="post" action="{% url 'release_case' case.tracking_id %}" class="card">
+    <form method="post" action="{% url 'release_case' case.tracking_id %}" class="card" data-confirm-unsaved-doc-review="1">
         {% csrf_token %}
         <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
             <div>
@@ -353,7 +390,13 @@
                         <tr>
                             <td class="muted">{{ h.created_at|date:"M d, Y H:i" }}</td>
                             <td>{{ h.get_action_display }}</td>
-                            <td class="muted">{{ h.actor|default:"—" }}</td>
+                            <td class="muted">
+                                {% if h.actor %}
+                                    {{ h.actor.full_name|default:h.actor.username }} — {{ h.actor.get_role_display }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
                             <td class="muted">{{ h.details_display|default:"—"|linebreaksbr }}</td>
                         </tr>
                     {% endfor %}
@@ -370,7 +413,13 @@
                         <tr>
                             <td class="muted">{{ h.created_at|date:"M d, Y H:i" }}</td>
                             <td>{{ h.get_action_display }}</td>
-                            <td class="muted">{{ h.actor|default:"—" }}</td>
+                            <td class="muted">
+                                {% if h.actor %}
+                                    {{ h.actor.full_name|default:h.actor.username }} — {{ h.actor.get_role_display }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
                             <td class="muted">{{ h.details_display|default:"—"|linebreaksbr }}</td>
                         </tr>
                     {% endfor %}
@@ -379,4 +428,45 @@
         </div>
     </div>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    (function () {
+        var form = document.getElementById('doc-review-form');
+        if (!form) return;
+
+        var dirty = false;
+        var saving = false;
+
+        function markDirty() {
+            if (!saving) dirty = true;
+        }
+
+        form.addEventListener('change', markDirty);
+        form.addEventListener('input', markDirty);
+        form.addEventListener('submit', function () {
+            saving = true;
+            dirty = false;
+        });
+
+        window.addEventListener('beforeunload', function (e) {
+            if (!dirty) return;
+            e.preventDefault();
+            e.returnValue = '';
+        });
+
+        var guarded = document.querySelectorAll('form[data-confirm-unsaved-doc-review="1"]');
+        guarded.forEach(function (f) {
+            f.addEventListener('submit', function (e) {
+                if (!dirty) return;
+                var ok = window.confirm('You have unsaved changes in Uploaded Documents. Continue without saving?');
+                if (!ok) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            });
+        });
+    })();
+</script>
 {% endblock %}

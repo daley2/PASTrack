@@ -373,9 +373,11 @@ class AccountActivationForm(forms.Form):
             raise ValidationError("New password is required.")
         self.user.set_password(pw1)
         self.user.account_status = "active"
+        self.user.is_active = True
         self.user.must_change_password = False
         self.user.activated_at = timezone.now()
-        self.user.save(update_fields=["password", "account_status", "must_change_password", "activated_at", "is_active"])
+        self.user.activation_nonce = ""
+        self.user.save(update_fields=["password", "account_status", "is_active", "must_change_password", "activated_at", "activation_nonce"])
         return self.user
 
 

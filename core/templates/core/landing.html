@@ -1,11 +1,14 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Welcome{% endblock %}
 {% block container_class %}container--narrow{% endblock %}
 
 {% block content %}
 <div class="card text-center">
-    <div class="avatar avatar--lg" style="margin:0 auto 12px auto;"></div>
-    <h1 class="page-title">LegalTrack</h1>
+    <div style="display:flex; justify-content:center; margin:0 auto 12px auto;">
+        <img src="{% static 'core/PAStrackLOGO.png' %}" alt="PAStrack" style="max-width:340px; width:100%; height:auto;" />
+    </div>
+    <h1 class="page-title">PAStrack</h1>
     <p class="page-subtitle">Track your request status using your Tracking Number.</p>
 
     <form method="get" action="{% url 'track_case' %}" class="searchbar searchbar--center mt-14" style="margin:0;">

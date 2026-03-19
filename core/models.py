@@ -212,10 +212,10 @@ class CustomUser(AbstractUser):
         if send_email is None:
             send_email = bool(getattr(settings, "LEGALTRACK_SEND_EMAILS", True))
 
-        subject = "Activate Your LegalTrack Account"
+        subject = "Activate Your PAStrack Account"
         message = (
             f"Hello {self.full_name or self.email},\n\n"
-            "Your LegalTrack account has been created.\n\n"
+            "Your PAStrack account has been created.\n\n"
             f"Staff ID: {self.username}\n"
             f"Email: {self.email}\n"
             f"Temporary Password: {temp_password}\n\n"
@@ -341,6 +341,7 @@ class AuditLog(TimestampedModel):
         ("password_reset_complete", "Password Reset Completed"),
         ("case_create", "Case Created"),
         ("case_update", "Case Updated"),
+        ("case_document_review", "Case Document Reviewed"),
         ("case_remark", "Case Remark Added"),
         ("case_status_change", "Case Status Changed"),
         ("case_receipt", "Case Physically Received"),
@@ -408,8 +409,7 @@ class Case(TimestampedModel):
         ("draft", "Draft"),
         ("not_received", "Not Received"),          # LGU created, still editable
         ("received", "Received"),                  # Capitol marked receipt
-        ("for_review", "For Review"),              # Received but not yet opened by examiner
-        ("under_review", "Under Review"),          # Opened by examiner
+        ("in_review", "In Review"),
         ("for_approval", "For Approval"),
         ("approved", "Approved"),
         ("for_numbering", "For Numbering"),
@@ -679,6 +679,16 @@ class CaseDocument(TimestampedModel):
     case = models.ForeignKey("Case", on_delete=models.CASCADE, related_name="documents")
     doc_type = models.CharField(max_length=120)
     file = models.FileField(upload_to=case_document_upload_to, max_length=1024)
+    reviewed_ok = models.BooleanField(default=False)
+    review_remark = models.TextField(blank=True, default="")
+    reviewed_by = models.ForeignKey(
+        "CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_case_documents",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
     uploaded_by = models.ForeignKey(
         "CustomUser",
         on_delete=models.SET_NULL,
