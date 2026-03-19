@@ -73,13 +73,29 @@ class GmailEmailBackend(SMTPBackend):
                     host, port, timeout=self.timeout, context=context
                 )
             else:
-                print("[SMTP-DEBUG] Mode: Standard SMTP (STARTTLS if enabled)", file=sys.stderr)
-                self.connection = smtplib.SMTP(
-                    host, port, timeout=self.timeout
-                )
+                cand_ports: list[int] = [port] if port else []
+                host_l = str(self.host or "").lower()
+                if "brevo" in host_l or "sendinblue" in host_l:
+                    for p in (2525, 443, 587):
+                        if p not in cand_ports:
+                            cand_ports.append(p)
 
-            # For STARTTLS connections (usually port 587)
-            if self.use_tls and self.port != 465:
+                last_exc: Exception | None = None
+                for p in (cand_ports or [port]):
+                    try:
+                        print(f"[SMTP-DEBUG] Mode: Standard SMTP (port {p})", file=sys.stderr)
+                        self.connection = smtplib.SMTP(host, p, timeout=self.timeout)
+                        break
+                    except Exception as e:
+                        last_exc = e
+                        self.connection = None
+                        continue
+
+                if self.connection is None:
+                    raise last_exc or TimeoutError("SMTP connection failed")
+
+            # For STARTTLS connections (usually port 587/2525/443)
+            if self.use_tls and port != 465:
                 print("[SMTP-DEBUG] Enabling STARTTLS", file=sys.stderr)
                 self.connection.starttls(context=context)
 
