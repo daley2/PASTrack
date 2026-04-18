@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Case {{ case.tracking_id }}{% endblock %}
+{% block title %}Transaction {{ case.tracking_id }}{% endblock %}
 
 {% block content %}
 <div class="card">
-    <h2 class="page-title">Case {{ case.tracking_id }}</h2>
+    <h2 class="page-title">Transaction {{ case.tracking_id }}</h2>
     <p class="page-subtitle">Status: <strong>{{ case.get_status_display }}</strong></p>
 
     <div class="row">
@@ -19,15 +19,17 @@
 
 <div class="card card--flat">
     <div class="card__header">
-        <strong>Case Information</strong>
+        <strong>Transaction Information</strong>
     </div>
     <div class="card__body card__body--flush">
         <table class="table">
             <tbody>
-                <tr><td style="width:22%" class="muted"><strong>Client</strong></td><td>{{ case.client_display_name }}</td></tr>
-                <tr><td class="muted"><strong>Client Number</strong></td><td>{{ case.client_number|default:"—" }}</td></tr>
-                <tr><td class="muted"><strong>Client Email</strong></td><td>{{ case.client_email|default:"—" }}</td></tr>
-                <tr><td class="muted"><strong>Type of Case</strong></td><td>{{ case.get_case_type_display|default:"—" }}</td></tr>
+                <tr><td style="width:22%" class="muted"><strong>Owner</strong></td><td>{{ case.client_display_name }}</td></tr>
+                <tr><td class="muted"><strong>Owner Number</strong></td><td>{{ case.client_number|default:"—" }}</td></tr>
+                <tr><td class="muted"><strong>Owner Email</strong></td><td>{{ case.client_email|default:"—" }}</td></tr>
+                <tr><td class="muted"><strong>Type of Transaction</strong></td><td>{{ case.get_case_type_display|default:"—" }}</td></tr>
+                <tr><td class="muted"><strong>Taxmapped?</strong></td><td>{{ case.needs_taxmapping|yesno:"Yes,No" }}</td></tr>
+                <tr><td class="muted"><strong>Municipality</strong></td><td>{{ case.area|default:"—" }}</td></tr>
                 {% if case.case_type == "land_first_time" or case.case_type == "transfer_ownership_tax_decl" %}
                     <tr><td class="muted"><strong>Property Title Type</strong></td><td>{{ case.get_property_title_type_display|default:"—" }}</td></tr>
                 {% endif %}
@@ -42,13 +44,16 @@
                     </tr>
                 {% endif %}
                 <tr><td class="muted"><strong>Submitted by</strong></td><td>{{ case.submitted_by|default:"—" }}</td></tr>
-                <tr><td class="muted"><strong>LGU Area Code</strong></td><td>{{ case.lgu_area_code|default:"—" }}</td></tr>
+                <tr><td class="muted"><strong>LGU Code</strong></td><td>{{ case.lgu_area_code|default:"—" }}</td></tr>
                 <tr><td class="muted"><strong>Created</strong></td><td>{{ case.created_at|date:"M d, Y H:i" }}</td></tr>
                 {% if case.received_at %}
                     <tr><td class="muted"><strong>Received</strong></td><td>{{ case.received_at|date:"M d, Y H:i" }}{% if case.received_by %} (by {{ case.received_by.full_name }}){% endif %}</td></tr>
                 {% endif %}
                 {% if case.assigned_to %}
                     <tr><td class="muted"><strong>Assigned to</strong></td><td>{{ case.assigned_to.full_name }}{% if case.assigned_at %} ({{ case.assigned_at|date:"M d, Y H:i" }}){% endif %}</td></tr>
+                {% endif %}
+                {% if case.taxmapper_assigned_to %}
+                    <tr><td class="muted"><strong>Tax Mapper</strong></td><td>{{ case.taxmapper_assigned_to.full_name|default:case.taxmapper_assigned_to.email }}</td></tr>
                 {% endif %}
             </tbody>
         </table>
@@ -58,7 +63,7 @@
 {% if case.return_reason and case.returned_at %}
     <div class="card">
         {% if case.status == "client_correction" %}
-            <h3 class="m-0" style="margin-bottom:8px;">Client Correction Window</h3>
+            <h3 class="m-0" style="margin-bottom:8px;">Owner Correction Window</h3>
         {% else %}
             <h3 class="m-0" style="margin-bottom:8px;">Returned for Correction</h3>
         {% endif %}
@@ -193,7 +198,7 @@
         <label for="id_reason">Return Reason</label>
         <textarea id="id_reason" name="reason" rows="3" placeholder="State what needs correction..."></textarea>
         <div style="display:flex; justify-content:flex-end; margin-top:12px;">
-            <button class="btn btn-danger" type="submit">Return to Client (30 days)</button>
+            <button class="btn btn-danger" type="submit">Return to Owner (30 days)</button>
         </div>
     </form>
 {% endif %}
@@ -261,7 +266,7 @@
     {% endif %}
 {% endif %}
 
-{# Case history moved to the bottom so action controls appear above it #}
+{# Transaction history moved to the bottom so action controls appear above it #}
 
 {% if can_submit_for_approval %}
     <form method="post" action="{% url 'submit_for_approval' case.tracking_id %}" class="card" data-confirm-unsaved-doc-review="1">
@@ -269,7 +274,7 @@
         <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
             <div>
                 <strong>Examiner</strong>
-                <div class="muted">Submit this case for approval.</div>
+                <div class="muted">Submit this transaction for approval.</div>
             </div>
             <button class="btn btn-primary" type="submit">Submit for Approval</button>
         </div>
@@ -288,16 +293,41 @@
 {% endif %}
 
 {% if can_approve %}
-    <form method="post" action="{% url 'approve_case' case.tracking_id %}" class="card" data-confirm-unsaved-doc-review="1">
-        {% csrf_token %}
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-            <div>
-                <strong>Approver</strong>
-                <div class="muted">Approve and send to numbering.</div>
+    {% if can_assign_taxmapper %}
+        <form method="post" action="{% url 'assign_taxmapper' case.tracking_id %}" class="card" data-confirm-unsaved-doc-review="1">
+            {% csrf_token %}
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+                <div>
+                    <strong>Approver</strong>
+                    <div class="muted">This transaction is marked as Taxmapped. Assign a Tax Mapper.</div>
+                </div>
+                <div class="row" style="margin:0; align-items:end;">
+                    <div style="min-width:220px;">
+                        <label for="id_taxmapper">Tax Mapper</label>
+                        <select id="id_taxmapper" name="taxmapper_id">
+                            {% for u in taxmappers %}
+                                <option value="{{ u.id }}">{{ u.full_name|default:u.email }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <button class="btn btn-primary" type="submit">Assign</button>
+                    </div>
+                </div>
             </div>
-            <button class="btn btn-primary" type="submit">Approve</button>
-        </div>
-    </form>
+        </form>
+    {% else %}
+        <form method="post" action="{% url 'approve_case' case.tracking_id %}" class="card" data-confirm-unsaved-doc-review="1">
+            {% csrf_token %}
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+                <div>
+                    <strong>Approver</strong>
+                    <div class="muted">Approve and send to numbering.</div>
+                </div>
+                <button class="btn btn-primary" type="submit">Approve</button>
+            </div>
+        </form>
+    {% endif %}
 
     <form method="post" action="{% url 'return_for_correction' case.tracking_id %}" class="card" data-confirm-unsaved-doc-review="1">
         {% csrf_token %}
@@ -305,6 +335,19 @@
         <textarea id="id_approver_reason" name="reason" rows="3" placeholder="State what needs correction..."></textarea>
         <div style="display:flex; justify-content:flex-end; margin-top:12px;">
             <button class="btn btn-danger" type="submit">Return to Examiner</button>
+        </div>
+    </form>
+{% endif %}
+
+{% if can_complete_taxmapping %}
+    <form method="post" action="{% url 'complete_taxmapping' case.tracking_id %}" class="card" data-confirm-unsaved-doc-review="1">
+        {% csrf_token %}
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+            <div>
+                <strong>Tax Mapper</strong>
+                <div class="muted">Mark this transaction as taxmapped and send to Numberer.</div>
+            </div>
+            <button class="btn btn-primary" type="submit">Complete Tax Mapping</button>
         </div>
     </form>
 {% endif %}
@@ -334,7 +377,7 @@
         {% endif %}
 
         <label for="id_numbers">Add numbers</label>
-        <textarea id="id_numbers" name="numbers" rows="2" placeholder="e.g. {{ suggested_next_number }}, {{ suggested_next_number|add:'1' }}">{{ suggested_next_number }}</textarea>
+        <textarea id="id_numbers" name="numbers" rows="2" placeholder="e.g. {{ suggested_next_number }}">{{ suggested_next_number }}</textarea>
         
         <label style="display:flex; align-items:flex-start; gap:10px; margin-top:12px; margin-bottom:12px;">
             <input type="checkbox" name="finalize_confirm" value="1" required style="width:auto; margin-top:3px;" />
@@ -346,7 +389,7 @@
 
         <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:12px;">
             <div>
-                <div class="muted">Move this case to For Release.</div>
+                <div class="muted">Move this transaction to For Release.</div>
             </div>
             <button class="btn btn-primary" type="submit">Mark as Numbered</button>
         </div>
@@ -359,7 +402,7 @@
         <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
             <div>
                 <strong>Release</strong>
-                <div class="muted">Mark this case as Released.</div>
+                <div class="muted">Mark this transaction as Released.</div>
             </div>
             <button class="btn btn-primary" type="submit">Release</button>
         </div>
@@ -369,7 +412,7 @@
 {% if show_internal and history %}
     <div class="card card--flat" x-data="{ historyExpanded: false }">
         <div class="card__header" style="display:flex; justify-content:space-between; align-items:center;">
-            <strong>Case History</strong>
+            <strong>Transaction History</strong>
             <button @click="historyExpanded = !historyExpanded" class="btn btn-link" type="button">
                 <span x-show="!historyExpanded">Add more (Show all)</span>
                 <span x-show="historyExpanded">Add less (Collapse)</span>

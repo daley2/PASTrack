@@ -54,6 +54,12 @@ class CaseSubmissionForm(forms.ModelForm):
 
 
 class CaseDetailsForm(forms.ModelForm):
+    needs_taxmapping = forms.BooleanField(
+        required=False,
+        label="Taxmapped?",
+        help_text="Check if this transaction needs tax mapping.",
+    )
+
     class Meta:
         model = Case
         fields: ClassVar[list[str]] = [
@@ -66,6 +72,7 @@ class CaseDetailsForm(forms.ModelForm):
             "area",
             "case_type",
             "property_title_type",
+            "needs_taxmapping",
         ]
         widgets: ClassVar[dict] = {
             "client_first_name": forms.TextInput(attrs={"placeholder": "First name"}),
@@ -79,7 +86,7 @@ class CaseDetailsForm(forms.ModelForm):
                 "pattern": "9\\d{9}",
                 "maxlength": "10",
             }),
-            "client_email": forms.EmailInput(attrs={"placeholder": "Client email"}),
+            "client_email": forms.EmailInput(attrs={"placeholder": "Owner email"}),
             "area": forms.Select(),
             "case_type": forms.Select(),
             "property_title_type": forms.Select(),
@@ -93,7 +100,7 @@ class CaseDetailsForm(forms.ModelForm):
         if not (cleaned.get("client_last_name") or "").strip():
             self.add_error("client_last_name", "Last name is required.")
         if not (cleaned.get("case_type") or "").strip():
-            self.add_error("case_type", "Type of case is required.")
+            self.add_error("case_type", "Type of transaction is required.")
 
         raw_num = (cleaned.get("client_number") or "").strip()
         if raw_num:
@@ -110,7 +117,7 @@ class CaseDetailsForm(forms.ModelForm):
             if len(digits) != 10 or not digits.startswith("9"):
                 self.add_error("client_number", "Enter a valid 10-digit number starting with 9.")
             else:
-                # STORE only the 10 digits (e.g., 9216817799)
+                # STORE only the 10 digits
                 cleaned["client_number"] = digits
 
         case_type = (cleaned.get("case_type") or "").strip()
@@ -209,6 +216,7 @@ class StaffAccountCreateForm(forms.ModelForm):
             ("capitol_receiving", "Receiver"),
             ("capitol_examiner", "Examiner"),
             ("capitol_approver", "Approver"),
+            ("capitol_taxmapper", "Tax Mapper"),
             ("capitol_numberer", "Numberer"),
             ("capitol_releaser", "Releaser"),
         ],
@@ -420,7 +428,7 @@ class PublicCaseSearchForm(forms.Form):
     q = forms.CharField(
         label="Tracking Number",
         required=True,
-        widget=forms.TextInput(attrs={"placeholder": "e.g., PAS26010001"}),
+        widget=forms.TextInput(attrs={"placeholder": "e.g., PAS26A7S12B"}),
     )
 
     def clean_q(self):

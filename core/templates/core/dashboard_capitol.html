@@ -7,11 +7,38 @@
     <p class="page-subtitle">{{ user.full_name|default:user.email }}</p>
 </div>
 
+{% if activity_counts %}
+    <div class="card card--flat">
+        <div class="card__header">
+            <strong>My Report</strong>
+            <span class="muted">Total actions: <strong>{{ activity_total }}</strong></span>
+        </div>
+        <div class="card__body card__body--flush">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Action</th>
+                        <th style="width:18%">Count</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in activity_counts %}
+                        <tr>
+                            <td>{{ r.action }}</td>
+                            <td class="muted">{{ r.count }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endif %}
+
 {% if user.role == 'capitol_receiving' %}
     <div class="card card--flat">
         <div class="card__header">
             <strong>Receiving Queue</strong>
-            <span style="margin-left:auto;"><a class="btn btn-primary btn-sm" href="{% url 'submit_case' %}">+ New Request</a></span>
+            <span style="margin-left:auto;"><a class="btn btn-primary btn-sm" href="{% url 'submit_case' %}">+ New Transaction</a></span>
         </div>
         <div class="card__body card__body--flush">
             <div class="card__body" style="padding:14px 16px;">
@@ -27,7 +54,7 @@
                 <thead>
                     <tr>
                         <th style="width:22%">Tracking No.</th>
-                        <th>Client</th>
+                        <th>Owner</th>
                         <th style="width:18%">Status</th>
                         <th style="width:18%">{% if tab == 'received' %}Received{% else %}Created{% endif %}</th>
                         <th style="width:14%">Action</th>
@@ -70,7 +97,7 @@
                 </div>
             {% endif %}
             {% else %}
-                <div class="card__body"><p class="muted" style="margin:0;">No cases found for this tab.</p></div>
+                <div class="card__body"><p class="muted" style="margin:0;">No transactions found for this tab.</p></div>
             {% endif %}
         </div>
     </div>
@@ -78,7 +105,7 @@
 {% elif user.role == 'capitol_examiner' %}
     <div class="card card--flat">
         <div class="card__header">
-            <strong>My Assigned Cases</strong>
+            <strong>My Assigned Transactions</strong>
         </div>
         <div class="card__body card__body--flush">
             {% if my_cases %}
@@ -86,7 +113,7 @@
                     <thead>
                         <tr>
                             <th style="width:22%">Tracking No.</th>
-                            <th>Client</th>
+                            <th>Owner</th>
                             <th style="width:18%">Status</th>
                             <th style="width:20%">Assigned</th>
                             <th style="width:14%">Action</th>
@@ -105,7 +132,7 @@
                     </tbody>
                 </table>
             {% else %}
-                <div class="card__body"><p class="muted" style="margin:0;">No assigned cases yet.</p></div>
+                <div class="card__body"><p class="muted" style="margin:0;">No assigned transactions yet.</p></div>
             {% endif %}
         </div>
     </div>
@@ -121,7 +148,7 @@
                         <tr>
                             <th style="width:22%">Tracking No.</th>
                             <th style="width:10%">LGU Code</th>
-                            <th>Client</th>
+                            <th>Owner</th>
                             <th style="width:18%">Status</th>
                             <th style="width:20%">Updated</th>
                             <th style="width:14%">Action</th>
@@ -141,7 +168,42 @@
                     </tbody>
                 </table>
             {% else %}
-                <div class="card__body"><p class="muted" style="margin:0;">No cases for approval.</p></div>
+                <div class="card__body"><p class="muted" style="margin:0;">No transactions for approval.</p></div>
+            {% endif %}
+        </div>
+    </div>
+
+{% elif user.role == 'capitol_taxmapper' %}
+    <div class="card card--flat">
+        <div class="card__header">
+            <strong>Tax Mapping Queue</strong>
+        </div>
+        <div class="card__body card__body--flush">
+            {% if queue_cases %}
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th style="width:22%">Tracking No.</th>
+                            <th>Owner</th>
+                            <th style="width:18%">Taxmapped?</th>
+                            <th style="width:20%">Updated</th>
+                            <th style="width:14%">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for case in queue_cases %}
+                            <tr>
+                                <td><strong><a href="{% url 'case_detail' case.tracking_id %}">{{ case.tracking_id }}</a></strong></td>
+                                <td>{{ case.client_display_name }}</td>
+                                <td class="muted">{{ case.taxmapped_at|yesno:"Yes,No" }}</td>
+                                <td class="muted">{{ case.updated_at|date:"M d, Y H:i" }}</td>
+                                <td><a class="btn btn-secondary btn-sm" href="{% url 'case_detail' case.tracking_id %}">Open</a></td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <div class="card__body"><p class="muted" style="margin:0;">No transactions for tax mapping.</p></div>
             {% endif %}
         </div>
     </div>
@@ -186,7 +248,7 @@
                     <thead>
                         <tr>
                             <th style="width:22%">Tracking No.</th>
-                            <th>Client</th>
+                            <th>Owner</th>
                             <th style="width:18%">Status</th>
                             <th style="width:20%">Updated</th>
                             <th style="width:14%">Action</th>
@@ -205,7 +267,7 @@
                     </tbody>
                 </table>
             {% else %}
-                <div class="card__body"><p class="muted" style="margin:0;">No cases for numbering.</p></div>
+                <div class="card__body"><p class="muted" style="margin:0;">No transactions for numbering.</p></div>
             {% endif %}
         </div>
     </div>
@@ -221,7 +283,7 @@
                     <thead>
                         <tr>
                             <th style="width:22%">Tracking No.</th>
-                            <th>Client</th>
+                            <th>Owner</th>
                             <th style="width:18%">Status</th>
                             <th style="width:20%">Updated</th>
                             <th style="width:14%">Action</th>
@@ -240,7 +302,7 @@
                     </tbody>
                 </table>
             {% else %}
-                <div class="card__body"><p class="muted" style="margin:0;">No cases for release.</p></div>
+                <div class="card__body"><p class="muted" style="margin:0;">No transactions for release.</p></div>
             {% endif %}
         </div>
     </div>

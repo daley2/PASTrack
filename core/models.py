@@ -59,6 +59,7 @@ class CustomUser(AbstractUser):
         ("capitol_receiving", "Receiver"),
         ("capitol_examiner", "Examiner"),
         ("capitol_approver", "Approver"),
+        ("capitol_taxmapper", "Tax Mapper"),
         ("capitol_numberer", "Numberer"),
         ("capitol_releaser", "Releaser"),
     ]
@@ -170,6 +171,7 @@ class CustomUser(AbstractUser):
             "capitol_receiving": "REC",
             "capitol_examiner": "EXM",
             "capitol_approver": "APR",
+            "capitol_taxmapper": "TAX",
             "capitol_numberer": "NUM",
             "capitol_releaser": "REL",
         }
@@ -339,16 +341,16 @@ class AuditLog(TimestampedModel):
         ("activate_account", "Account Activated"),
         ("password_reset_request", "Password Reset Requested"),
         ("password_reset_complete", "Password Reset Completed"),
-        ("case_create", "Case Created"),
-        ("case_update", "Case Updated"),
-        ("case_document_review", "Case Document Reviewed"),
-        ("case_remark", "Case Remark Added"),
-        ("case_status_change", "Case Status Changed"),
-        ("case_receipt", "Case Physically Received"),
-        ("case_assignment", "Case Assigned"),
-        ("case_approval", "Case Approved"),
-        ("case_rejection", "Case Rejected"),
-        ("case_release", "Case Released"),
+        ("case_create", "Transaction Created"),
+        ("case_update", "Transaction Updated"),
+        ("case_document_review", "Transaction Document Reviewed"),
+        ("case_remark", "Transaction Remark Added"),
+        ("case_status_change", "Transaction Status Changed"),
+        ("case_receipt", "Transaction Physically Received"),
+        ("case_assignment", "Transaction Assigned"),
+        ("case_approval", "Transaction Approved"),
+        ("case_rejection", "Transaction Rejected"),
+        ("case_release", "Transaction Released"),
         ("support_feedback", "Support Feedback Submitted"),
     ]
 
@@ -410,6 +412,7 @@ class Case(TimestampedModel):
         ("not_received", "Not Received"),          # LGU created, still editable
         ("received", "Received"),                  # Capitol marked receipt
         ("in_review", "In Review"),
+        ("for_taxmapping", "For Taxmapping"),      # Added for TaxMapper flow
         ("for_approval", "For Approval"),
         ("approved", "Approved"),
         ("for_numbering", "For Numbering"),
@@ -478,10 +481,6 @@ class Case(TimestampedModel):
         help_text="List of dicts: [{'doc_type': 'Land Title', 'required': True, 'uploaded': False}]"
     )
 
-    # ---------- Optional scanned files ----------
-    # We'll store files in media/cases/<tracking_id>/
-    # (FileField will be added later when MEDIA is configured)
-
     # ---------- Timestamps ----------
     received_by = models.ForeignKey(
         CustomUser,
@@ -503,7 +502,7 @@ class Case(TimestampedModel):
     return_reason = models.TextField(blank=True)
     client_correction_deadline = models.DateTimeField(null=True, blank=True)
 
-    # ---------- Assignment (Module 3.1) ----------
+    # ---------- Assignment ----------
     assigned_to = models.ForeignKey(
         CustomUser,
         on_delete=models.SET_NULL,
@@ -512,6 +511,17 @@ class Case(TimestampedModel):
         related_name="assigned_cases"
     )
     assigned_at = models.DateTimeField(null=True, blank=True)
+
+    # ---------- Tax Mapping ----------
+    needs_taxmapping = models.BooleanField(default=False)
+    taxmapper_assigned_to = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="taxmapped_cases"
+    )
+    taxmapped_at = models.DateTimeField(null=True, blank=True)
 
     released_at = models.DateTimeField(null=True, blank=True)
     lgu_submitted_at = models.DateTimeField(null=True, blank=True)
@@ -523,8 +533,8 @@ class Case(TimestampedModel):
             models.Index(fields=["created_at"]),
             models.Index(fields=["updated_at"]),
         ]
-        verbose_name = "Case"
-        verbose_name_plural = "Cases"
+        verbose_name = "Transaction"
+        verbose_name_plural = "Transactions"
 
     def __str__(self):
         if self.tracking_id:
@@ -560,32 +570,23 @@ class Case(TimestampedModel):
         return formatted_number or email or (self.client_contact or "").strip()
 
     # ------------------------------------------------------------------
-    # Auto-generate tracking_id: PAS[YY][MM][####]
-    # - Example: PAS26010001
-    # - Serial resets monthly (YYMM)
+    # Auto-generate tracking_id: PAS[YY][RANDOM]
+    # - Example: PAS26A7S12B
     # ------------------------------------------------------------------
     def generate_tracking_id(self) -> str:
         now = timezone.localtime(timezone.now())
         yy = now.strftime("%y")
-        mm = now.strftime("%m")
-
-        # Tracking number always starts with "PAS" (Provincial Assessor's Office)
-        full_prefix = f"PAS{yy}{mm}"
-
-        existing_ids = Case.objects.filter(
-            tracking_id__startswith=full_prefix
-        ).values_list("tracking_id", flat=True)
-
-        max_seq = 0
-        for tid in existing_ids:
-            if isinstance(tid, str) and len(tid) >= 4 and tid[-4:].isdigit():
-                max_seq = max(max_seq, int(tid[-4:]))
-
-        next_seq = max_seq + 1
-        if next_seq > 9999:
-            raise ValueError("Monthly case sequence exceeded 9999")
-
-        return f"{full_prefix}{next_seq:04d}"
+        
+        # PAS + YY + 6 random alphanumeric characters
+        chars = string.ascii_uppercase + string.digits
+        
+        for _ in range(10):
+            random_part = "".join(secrets.choice(chars) for _ in range(6))
+            tid = f"PAS{yy}{random_part}"
+            if not Case.objects.filter(tracking_id=tid).exists():
+                return tid
+        
+        raise ValueError("Unable to generate unique tracking_id")
 
     # ------------------------------------------------------------------
     #  Save override
@@ -607,21 +608,27 @@ class Case(TimestampedModel):
             if self.tracking_id.startswith("PAS"):
                 return super().save(*args, **kwargs)
             else:
-                # Force regeneration if the prefix is wrong (e.g., DAL, CON)
+                # Force regeneration if the prefix is wrong
                 self.tracking_id = ""
 
         # Drafts (not yet submitted) intentionally have no tracking_id.
-        # Tracking ID is generated only when the case is submitted.
         if self.lgu_submitted_at is None:
             return super().save(*args, **kwargs)
 
-        # Generate tracking_id on first save. Retry a few times to avoid
-        # collisions when multiple cases are created concurrently.
-        last_err: Exception | None = None
-        for _ in range(10):
+        if not self.tracking_id:
             self.tracking_id = self.generate_tracking_id()
             
-            # Ensure tracking_id is included if update_fields is present
+            if "update_fields" in kwargs and kwargs["update_fields"] is not None:
+                fields = list(kwargs["update_fields"])
+                if "tracking_id" not in fields:
+                    fields.append("tracking_id")
+                kwargs["update_fields"] = fields
+
+        last_err: Exception | None = None
+        for _ in range(10):
+            if not self.tracking_id:
+                self.tracking_id = self.generate_tracking_id()
+
             if "update_fields" in kwargs and kwargs["update_fields"] is not None:
                 fields = list(kwargs["update_fields"])
                 if "tracking_id" not in fields:
@@ -711,7 +718,7 @@ class CaseDocument(TimestampedModel):
 
 class CaseNumber(TimestampedModel):
     case = models.ForeignKey("Case", on_delete=models.CASCADE, related_name="numbers")
-    number = models.PositiveIntegerField(unique=True)
+    number = models.CharField(max_length=5, unique=True, blank=False, default="")
 
     class Meta:
         ordering: ClassVar[list[str]] = ["number"]
@@ -723,6 +730,14 @@ class CaseNumber(TimestampedModel):
     def __str__(self):
         key = self.case.tracking_id or str(getattr(self.case, "draft_id", ""))
         return f"{key} - {self.number}"
+
+    def save(self, *args, **kwargs):
+        raw = (self.number or "").strip()
+        if raw.isdigit():
+            if len(raw) > 5:
+                raise ValueError("Number must be at most 5 digits.")
+            self.number = raw.zfill(5)
+        super().save(*args, **kwargs)
 
 
 class CaseRemark(TimestampedModel):

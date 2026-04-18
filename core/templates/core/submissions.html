@@ -11,10 +11,10 @@
         <form method="get" class="searchbar m-0">
             <div class="grow">
                 <label for="id_q">Search</label>
-                <input id="id_q" name="q" value="{{ q }}" placeholder="Tracking ID, client, email..." />
+                <input id="id_q" name="q" value="{{ q }}" placeholder="Tracking ID, owner, email..." />
             </div>
             <div style="min-width:220px;">
-                <label for="id_case_type">Case Type</label>
+                <label for="id_case_type">Transaction Type</label>
                 <select id="id_case_type" name="case_type">
                     <option value="">All</option>
                     {% for v,l in case_type_choices %}
@@ -60,7 +60,7 @@
 
 <div class="card card--flat">
     <div class="card__header">
-        <strong>Cases</strong>
+        <strong>Transactions</strong>
         <span class="muted">{{ page_obj.paginator.count }} total</span>
     </div>
     <div class="card__body card__body--flush">
@@ -69,7 +69,7 @@
                 <thead>
                     <tr>
                         <th style="width:22%">Tracking No.</th>
-                        <th>Client</th>
+                        <th>Owner</th>
                         <th style="width:16%">Status</th>
                         <th style="width:22%">Updated</th>
                         <th style="width:12%">Action</th>
@@ -91,7 +91,7 @@
                 </tbody>
             </table>
         {% else %}
-            <div class="card__body"><p class="muted" style="margin:0;">No cases found.</p></div>
+            <div class="card__body"><p class="muted" style="margin:0;">No transactions found.</p></div>
         {% endif %}
     </div>
 

@@ -7,6 +7,7 @@ export const Roles = {
     capitol_receiving: 'capitol_receiving',
     capitol_examiner: 'capitol_examiner',
     capitol_approver: 'capitol_approver',
+    capitol_taxmapper: 'capitol_taxmapper',
     capitol_numberer: 'capitol_numberer',
     capitol_releaser: 'capitol_releaser',
 }

@@ -153,6 +153,7 @@ def _public_status_label(case: Case) -> str:
         "not_received": "Pending",
         "received": "Received",
         "in_review": "Reviewed",
+        "for_taxmapping": "Tax Mapping",
         "for_approval": "Approved",
         "approved": "Approved",
         "for_numbering": "Numbered",
@@ -174,7 +175,7 @@ def _build_public_timeline(case: Case) -> list[dict[str, object]]:
             events.append({"label": label, "when": when})
 
     # Initial creation
-    add("Request Created", case.created_at)
+    add("Transaction Created", case.created_at)
     
     # Key transitions from audit logs
     history_qs = (
@@ -494,6 +495,8 @@ def _user_is_current_owner_for_internal_sections(user: CustomUser, case: Case) -
         return getattr(case, "status", "") in {"for_review", "under_review", "in_review"} and getattr(case, "assigned_to_id", None) == getattr(user, "id", None)
     if role == "capitol_approver":
         return getattr(case, "status", "") == "for_approval"
+    if role == "capitol_taxmapper":
+        return getattr(case, "status", "") == "for_taxmapping" and getattr(case, "taxmapper_assigned_to_id", None) == getattr(user, "id", None)
     if role == "capitol_numberer":
         return getattr(case, "status", "") == "for_numbering"
     if role == "capitol_releaser":
@@ -761,7 +764,7 @@ def dashboard(request):
         tab_map = {
             "all": None,
             "pending": {"not_received", "client_correction"},
-            "received": {"received", "in_review", "for_approval", "for_numbering", "for_release", "released"},
+            "received": {"received", "in_review", "for_taxmapping", "for_approval", "for_numbering", "for_release", "released"},
         }
         statuses = tab_map.get(tab)
         qs = base_qs
@@ -790,6 +793,23 @@ def dashboard(request):
         template = "core/dashboard_lgu.html"
 
     else:  # Capitol roles
+        activity_raw = list(
+            AuditLog.objects.filter(actor=user, action__startswith="case_")
+            .values("action")
+            .annotate(count=Count("id"))
+            .order_by("action")
+        )
+        activity_labels = dict(AuditLog.ACTION_CHOICES)
+        activity_counts = [
+            {"action": activity_labels.get(r["action"], r["action"]), "count": r["count"]}
+            for r in activity_raw
+            if r.get("count")
+        ]
+        context.update({
+            "activity_counts": activity_counts,
+            "activity_total": sum(int(r.get("count") or 0) for r in activity_raw),
+        })
+
         context.update({
             "section": "capitol_staff",
             "capitol_role": user.get_role_display(),
@@ -824,6 +844,14 @@ def dashboard(request):
             queue_cases = Case.objects.filter(status="for_approval").order_by("-updated_at")[:50]
             context.update({"queue_cases": queue_cases})
 
+        elif user.role == "capitol_taxmapper":
+            queue_cases = (
+                Case.objects.filter(status="for_taxmapping", taxmapper_assigned_to=user)
+                .select_related("submitted_by")
+                .order_by("-updated_at")[:50]
+            )
+            context.update({"queue_cases": queue_cases})
+
         elif user.role == "capitol_numberer":
             queue_cases = (
                 Case.objects.filter(status="for_numbering")
@@ -848,8 +876,9 @@ def dashboard(request):
                 queue_cases = queue_cases.filter(created_at__date__lte=date_to)
             if number_q:
                 if number_q.isdigit():
+                    padded = number_q.zfill(5) if len(number_q) <= 5 else number_q
                     queue_cases = queue_cases.filter(
-                        Q(numbers__number=int(number_q)) |
+                        Q(numbers__number=padded) |
                         Q(tracking_id__icontains=number_q)
                     )
                 else:
@@ -859,7 +888,8 @@ def dashboard(request):
                 queue_cases = queue_cases.distinct()
 
             last_used = CaseNumber.objects.order_by("-number").values_list("number", flat=True).first()
-            suggested_next = (int(last_used) + 1) if last_used else 1
+            suggested_next = (int(last_used) + 1) if (last_used and str(last_used).isdigit()) else 1
+            suggested_next_str = str(suggested_next).zfill(5)
 
             context.update({
                 "queue_cases": queue_cases[:50],
@@ -869,7 +899,7 @@ def dashboard(request):
                 "filter_date_to": date_to_raw,
                 "filter_number": number_q,
                 "last_used_number": last_used,
-                "suggested_next_number": suggested_next,
+                "suggested_next_number": suggested_next_str,
             })
 
         elif user.role == "capitol_releaser":
@@ -2165,9 +2195,21 @@ def case_detail(request, tracking_id):
         case.status == "for_approval"
     )
 
+    can_assign_taxmapper = bool(
+        request.user.role == "capitol_approver"
+        and case.status == "for_approval"
+        and bool(getattr(case, "needs_taxmapping", False))
+    )
+
     can_number = (
         request.user.role == "capitol_numberer" and
         case.status == "for_numbering"
+    )
+
+    can_complete_taxmapping = bool(
+        request.user.role == "capitol_taxmapper"
+        and case.status == "for_taxmapping"
+        and getattr(case, "taxmapper_assigned_to_id", None) == getattr(request.user, "id", None)
     )
 
     can_release = (
@@ -2193,6 +2235,8 @@ def case_detail(request, tracking_id):
             return case.status in {"for_review", "under_review", "in_review"} and case.assigned_to_id == user.id
         if role == "capitol_approver":
             return case.status == "for_approval"
+        if role == "capitol_taxmapper":
+            return case.status == "for_taxmapping" and case.taxmapper_assigned_to_id == user.id
         if role == "capitol_numberer":
             return case.status == "for_numbering"
         if role == "capitol_releaser":
@@ -2228,7 +2272,11 @@ def case_detail(request, tracking_id):
 
     case_numbers = list(CaseNumber.objects.filter(case=case).order_by("number").values_list("number", flat=True))
     last_used_number = CaseNumber.objects.order_by("-number").values_list("number", flat=True).first()
-    suggested_next_number = (int(last_used_number) + 1) if last_used_number else 1
+    suggested_next_number = str(((int(last_used_number) + 1) if (last_used_number and str(last_used_number).isdigit()) else 1)).zfill(5)
+
+    taxmappers = None
+    if can_assign_taxmapper:
+        taxmappers = CustomUser.objects.filter(role="capitol_taxmapper", is_active=True).order_by("full_name", "email")
 
     return render(request, "core/case_detail.html", {
         "case": case,
@@ -2240,6 +2288,9 @@ def case_detail(request, tracking_id):
         "can_submit_for_approval": can_submit_for_approval,
         "can_return_to_receiving": can_return_to_receiving,
         "can_approve": can_approve,
+        "can_assign_taxmapper": can_assign_taxmapper,
+        "taxmappers": taxmappers,
+        "can_complete_taxmapping": can_complete_taxmapping,
         "can_number": can_number,
         "can_release": can_release,
         "examiners": examiners,
@@ -2271,6 +2322,10 @@ def add_case_remark(request, tracking_id):
             return redirect("case_detail", tracking_id=case.tracking_id)
     elif role == "capitol_approver":
         if not (case.status == "for_approval" and case.status != "client_correction"):
+            messages.error(request, "Not authorized to remark on this case right now.")
+            return redirect("case_detail", tracking_id=case.tracking_id)
+    elif role == "capitol_taxmapper":
+        if not (case.status == "for_taxmapping" and case.taxmapper_assigned_to_id == request.user.id and case.status != "client_correction"):
             messages.error(request, "Not authorized to remark on this case right now.")
             return redirect("case_detail", tracking_id=case.tracking_id)
     elif role == "capitol_numberer":
@@ -2326,6 +2381,8 @@ def submissions(request):
         qs = qs.filter(assigned_to=request.user)
     elif request.user.role == "capitol_approver":
         qs = qs.filter(status="for_approval")
+    elif request.user.role == "capitol_taxmapper":
+        qs = qs.filter(status="for_taxmapping", taxmapper_assigned_to=request.user)
     elif request.user.role == "capitol_numberer":
         qs = qs.filter(status="for_numbering")
     elif request.user.role == "capitol_releaser":
@@ -2336,6 +2393,7 @@ def submissions(request):
         "pending": {"not_received", "client_correction"},
         "received": {"received"},
         "in_review": {"in_review", "for_review", "under_review"},
+        "for_taxmapping": {"for_taxmapping"},
         "for_approval": {"for_approval"},
         "for_numbering": {"for_numbering"},
         "for_release": {"for_release"},
@@ -2370,7 +2428,8 @@ def submissions(request):
     number_q = (request.GET.get("number") or "").strip()
     if number_q:
         if number_q.isdigit():
-            qs = qs.filter(Q(numbers__number=int(number_q)) | Q(tracking_id__icontains=number_q)).distinct()
+            padded = number_q.zfill(5) if len(number_q) <= 5 else number_q
+            qs = qs.filter(Q(numbers__number=padded) | Q(tracking_id__icontains=number_q)).distinct()
         else:
             qs = qs.filter(Q(tracking_id__icontains=number_q))
 
@@ -2391,6 +2450,7 @@ def submissions(request):
         ("pending", "Pending"),
         ("received", "Received"),
         ("in_review", "In Review"),
+        ("for_taxmapping", "For Taxmapping"),
         ("for_approval", "For Approval"),
         ("for_numbering", "For Numbering"),
         ("for_release", "For Release"),
@@ -2609,6 +2669,10 @@ def approve_case(request, tracking_id):
         messages.error(request, "Review all uploaded documents and mark them as checked before approving.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
+    if getattr(case, "needs_taxmapping", False):
+        messages.error(request, "This transaction requires tax mapping. Assign a Tax Mapper instead of approving.")
+        return redirect("case_detail", tracking_id=case.tracking_id)
+
     old_status = case.status
     case.status = "for_numbering"
     case.save(update_fields=["status", "updated_at"])
@@ -2631,6 +2695,76 @@ def approve_case(request, tracking_id):
     sns_hook(event="case_approved", payload={"tracking_id": case.tracking_id, "status": case.status})
 
     messages.success(request, f"Case {case.tracking_id} approved.")
+    return redirect("case_detail", tracking_id=case.tracking_id)
+
+
+@login_required
+@require_POST
+def assign_taxmapper(request, tracking_id):
+    case = get_object_or_404(Case, tracking_id=tracking_id)
+
+    if request.user.role != "capitol_approver":
+        messages.error(request, "Only Approvers can assign Tax Mappers.")
+        return redirect("case_detail", tracking_id=case.tracking_id)
+
+    if case.status != "for_approval" or not getattr(case, "needs_taxmapping", False):
+        messages.error(request, "This case is not eligible for tax mapping assignment.")
+        return redirect("case_detail", tracking_id=case.tracking_id)
+
+    taxmapper_id = (request.POST.get("taxmapper_id") or "").strip()
+    if not taxmapper_id.isdigit():
+        messages.error(request, "Please select a Tax Mapper.")
+        return redirect("case_detail", tracking_id=case.tracking_id)
+
+    taxmapper = get_object_or_404(CustomUser, id=int(taxmapper_id), role="capitol_taxmapper", is_active=True)
+
+    old_status = case.status
+    case.taxmapper_assigned_to = taxmapper
+    case.taxmapped_at = None
+    case.status = "for_taxmapping"
+    case.save(update_fields=["taxmapper_assigned_to", "taxmapped_at", "status", "updated_at"])
+
+    AuditLog.objects.create(
+        actor=request.user,
+        action="case_status_change",
+        target_object=f"Case: {case.tracking_id}",
+        details={
+            "old_status": old_status,
+            "new_status": case.status,
+            "assigned_to": f"{taxmapper.get_full_name()} - {taxmapper.get_role_display()}",
+        },
+    )
+
+    messages.success(request, f"Case {case.tracking_id} assigned for tax mapping.")
+    return redirect("case_detail", tracking_id=case.tracking_id)
+
+
+@login_required
+@require_POST
+def complete_taxmapping(request, tracking_id):
+    case = get_object_or_404(Case, tracking_id=tracking_id)
+
+    if request.user.role != "capitol_taxmapper":
+        messages.error(request, "Only Tax Mappers can complete tax mapping.")
+        return redirect("case_detail", tracking_id=case.tracking_id)
+
+    if case.status != "for_taxmapping" or case.taxmapper_assigned_to_id != request.user.id:
+        messages.error(request, "This case is not assigned to you for tax mapping.")
+        return redirect("case_detail", tracking_id=case.tracking_id)
+
+    old_status = case.status
+    case.taxmapped_at = timezone.now()
+    case.status = "for_numbering"
+    case.save(update_fields=["taxmapped_at", "status", "updated_at"])
+
+    AuditLog.objects.create(
+        actor=request.user,
+        action="case_status_change",
+        target_object=f"Case: {case.tracking_id}",
+        details={"old_status": old_status, "new_status": case.status, "taxmapped": True},
+    )
+
+    messages.success(request, f"Case {case.tracking_id} marked as taxmapped and sent to Numberer.")
     return redirect("case_detail", tracking_id=case.tracking_id)
 
 
@@ -2753,7 +2887,7 @@ def mark_numbered(request, tracking_id):
         messages.error(request, "Review all uploaded documents and mark them as checked before numbering.")
         return redirect("case_detail", tracking_id=case.tracking_id)
 
-    def parse_numbers(raw: str) -> list[int]:
+    def parse_numbers(raw: str) -> list[str]:
         raw = (raw or "").strip()
         if not raw:
             return []
@@ -2763,14 +2897,15 @@ def mark_numbered(request, tracking_id):
             if not chunk:
                 continue
             parts.append(chunk)
-        nums: list[int] = []
+        nums: list[str] = []
         for p in parts:
             if not p.isdigit():
                 raise ValueError(f"Invalid number: {p}")
-            n = int(p)
-            if n <= 0:
+            if len(p) > 5:
+                raise ValueError("Numbers must be at most 5 digits.")
+            if int(p) <= 0:
                 raise ValueError("Numbers must be positive integers.")
-            nums.append(n)
+            nums.append(p.zfill(5))
         # de-dupe while preserving order
         seen = set()
         out = []
@@ -2782,10 +2917,11 @@ def mark_numbered(request, tracking_id):
         return out
 
     remove_raw = request.POST.getlist("remove_numbers") or []
-    to_remove: set[int] = set()
+    to_remove: set[str] = set()
     for v in remove_raw:
-        if str(v).isdigit():
-            to_remove.add(int(v))
+        s = (str(v) or "").strip()
+        if s.isdigit() and len(s) <= 5 and int(s) > 0:
+            to_remove.add(s.zfill(5))
 
     numbers_raw = (request.POST.get("numbers") or "").strip()
     try:
@@ -2794,7 +2930,7 @@ def mark_numbered(request, tracking_id):
         messages.error(request, str(exc))
         return redirect("case_detail", tracking_id=case.tracking_id)
 
-    last_used = CaseNumber.objects.order_by("-number").values_list("number", flat=True).first() or 0
+    last_used = CaseNumber.objects.order_by("-number").values_list("number", flat=True).first() or ""
 
     with transaction.atomic():
         if to_remove:

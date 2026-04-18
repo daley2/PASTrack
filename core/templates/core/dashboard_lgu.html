@@ -7,7 +7,7 @@
     <p class="page-subtitle">{{ user.full_name|default:user.email }}</p>
 
     <div style="display:flex; justify-content:flex-end;">
-        <a class="btn btn-primary" href="{% url 'submit_case' %}">+ New Request</a>
+        <a class="btn btn-primary" href="{% url 'submit_case' %}">+ New Transaction</a>
     </div>
 </div>
 
@@ -52,7 +52,7 @@
                     <tr>
                         <th style="width:22%">Tracking No.</th>
                         <th style="width:10%">LGU Code</th>
-                        <th>Client</th>
+                        <th>Owner</th>
                         <th style="width:18%">Submitted by</th>
                         <th style="width:18%">Status</th>
                         <th style="width:18%">Created</th>
