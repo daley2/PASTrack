@@ -1,10 +1,15 @@
 {% extends "base.html" %}
+{% block sidebar_class %}sidebar--wide{% endblock %}
 {% block title %}Super Admin Dashboard{% endblock %}
 
 {% block content %}
-<h2>Super Administrator Dashboard</h2>
-<div class="card">
-    <p><strong>Total Staff Accounts:</strong> {{ total_users }}</p>
-    <p><a href="{% url 'user_management' %}">Open User Management</a></p>
+<div class="card card--flat card-elevated">
+    <div class="card__header" style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+        <strong style="font-size:1.05rem;">Super Administrator Dashboard</strong>
+        <a class="btn btn-primary btn-sm" href="{% url 'user_management' %}">Open User Management</a>
+    </div>
+    <div class="card__body">
+        <p style="margin:0;"><strong>Total Staff Accounts:</strong> {{ total_users }}</p>
+    </div>
 </div>
 {% endblock %}

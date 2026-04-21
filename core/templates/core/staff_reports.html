@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block sidebar_class %}sidebar--wide{% endblock %}
+{% block title %}Reports{% endblock %}
+
+{% block header_title %}Reports{% endblock %}
+{% block header_subtitle %}{{ role_display }}{% endblock %}
+
+{% block content %}
+<div class="card card--flat card-elevated">
+    <div class="card__header">
+        <strong>My Report</strong>
+        <span class="muted">Total actions: <strong>{{ activity_total }}</strong></span>
+    </div>
+    <div class="card__body card__body--flush">
+        {% if activity_counts %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Action</th>
+                        <th style="width:18%">Count</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in activity_counts %}
+                        <tr>
+                            <td>{{ r.action }}</td>
+                            <td class="muted">{{ r.count }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div class="card__body"><p class="muted" style="margin:0;">No activity yet.</p></div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

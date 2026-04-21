@@ -403,6 +403,34 @@ def reports(request):
 
 
 @login_required
+def staff_reports(request):
+    if not (_is_capitol_staff(request.user) or request.user.role == "super_admin"):
+        messages.error(request, "Not authorized.")
+        return redirect("dashboard")
+
+    user = request.user
+    activity_raw = list(
+        AuditLog.objects.filter(actor=user, action__startswith="case_")
+        .values("action")
+        .annotate(count=Count("id"))
+        .order_by("action")
+    )
+    activity_labels = dict(AuditLog.ACTION_CHOICES)
+    activity_counts = [
+        {"action": activity_labels.get(r["action"], r["action"]), "count": r["count"]}
+        for r in activity_raw
+        if r.get("count")
+    ]
+    total = sum(int(r.get("count") or 0) for r in activity_raw)
+
+    return render(request, "core/staff_reports.html", {
+        "role_display": user.get_role_display(),
+        "activity_counts": activity_counts,
+        "activity_total": total,
+    })
+
+
+@login_required
 def export_reports_csv(request):
     denial = _require_super_admin(request)
     if denial:
@@ -2341,7 +2369,7 @@ def case_detail(request, tracking_id):
     if can_assign_taxmapper:
         taxmappers = CustomUser.objects.filter(role="capitol_taxmapper", is_active=True).order_by("full_name", "email")
 
-    return render(request, "core/case_detail.html", {
+    response_context = {
         "case": case,
         "documents": list(case.documents.all()),
         "can_edit": can_edit,
@@ -2365,7 +2393,12 @@ def case_detail(request, tracking_id):
         "history": history,
         "can_remark": can_remark,
         "remark_form": remark_form,
-    })
+    }
+
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return render(request, "core/case_detail_drawer.html", response_context)
+
+    return render(request, "core/case_detail.html", response_context)
 
 
 @login_required

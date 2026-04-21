@@ -15,6 +15,7 @@ urlpatterns = [
     # Module 5 (Super Admin)
     path("analytics/", views.analytics_dashboard, name="analytics_dashboard"),
     path("reports/", views.reports, name="reports"),
+    path("staff-reports/", views.staff_reports, name="staff_reports"),
     path("reports/export.csv", views.export_reports_csv, name="export_reports_csv"),
     path("users/", views.user_management, name="user_management"),
     path("users/new/", views.create_staff_account, name="create_staff_account"),

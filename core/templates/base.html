@@ -9,17 +9,17 @@
     <style>
         [x-cloak] { display: none !important; }
         :root {
-            --bg: #f5f7fb;
+            --bg: #f7f8fb;
             --card: #ffffff;
             --text: #111111;
             --muted: #6b7280;
             --border: #e5e7eb;
             --border-strong: #d1d5db;
-            --primary: #18134a;
+            --primary: #1f3a8a;
             --accent: #f7d400;
             --danger: #b42318;
             --sidebar: #ffffff;
-            --shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+            --shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
         }
 
         * { box-sizing: border-box; }
@@ -37,8 +37,10 @@
             padding:18px 14px;
             gap:14px;
         }
-        .sidebar__brand {display:flex; justify-content:center;}
+        .sidebar__brand {display:flex; justify-content:center; align-items:center; gap:10px;}
+        .sidebar__brand a {display:flex; align-items:center; gap:10px;}
         .sidebar__brand img {height:44px; width:auto; display:block;}
+        .sidebar__brand .brand-text {display:none; font-weight:800; color:var(--primary); font-size:1.05rem;}
         .sidebar__nav {display:flex; flex-direction:column; gap:10px; margin-top:6px;}
         .sideitem {
             width:100%;
@@ -49,11 +51,19 @@
             justify-content:center;
             border:1px solid transparent;
             color:var(--muted);
+            gap:10px;
+            padding:0 10px;
         }
-        .sideitem.active {background:rgba(24,19,74,0.08); border-color:rgba(24,19,74,0.14); color:var(--primary); text-decoration:none;}
+        .sideitem.active {background:rgba(31,58,138,0.08); border-color:rgba(31,58,138,0.14); color:var(--primary); text-decoration:none;}
         .sideitem:hover {text-decoration:none; background:#f3f4f6;}
         .sideicon {width:20px; height:20px; display:block;}
+        .sidelabel {display:none; font-weight:700; font-size:0.95rem; color:var(--muted);}
         .sidebar__spacer {flex:1;}
+        .sidebar--wide {width:240px; padding:18px;}
+        .sidebar--wide .sideitem {justify-content:flex-start;}
+        .sidebar--wide .sidelabel {display:block;}
+        .sidebar--wide .sidebar__brand {justify-content:flex-start;}
+        .sidebar--wide .sidebar__brand .brand-text {display:block;}
         .app-main {flex:1; min-width:0; display:flex; flex-direction:column;}
         .app-header {
             background:transparent;
@@ -87,7 +97,7 @@
 
         .btn {display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 14px; border-radius:10px; border:1px solid var(--border-strong); background:#fff; cursor:pointer; font-weight:700;}
         .btn-primary {background:var(--primary); color:#fff; border-color:var(--primary);}
-        .btn-primary:hover {background:#120d3b; border-color:#120d3b;}
+        .btn-primary:hover {background:#1e40af; border-color:#1e40af;}
         .btn-secondary {background:#fff; color:var(--text);}
         .btn-success {background:#067647; color:#fff; border-color:#067647;}
         .btn-success:hover {background:#05603a; border-color:#05603a;}
@@ -130,6 +140,24 @@
 
         .muted {color:var(--muted);}
         .link-muted {color:var(--muted);}
+        .link-primary {color:var(--primary); font-weight:800;}
+        .link-accent {color:#d4a500; font-weight:900;}
+        .link-primary:hover, .link-accent:hover {text-decoration:underline;}
+        .sr-only{position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0;}
+
+        .drawer-backdrop{position:fixed; inset:0; background:rgba(15,23,42,.38); z-index:50; display:none;}
+        .drawer-backdrop.open{display:block;}
+        .drawer{position:fixed; top:0; right:0; height:100vh; width:min(560px, 94vw); background:#fff; border-left:1px solid var(--border); z-index:60; transform:translateX(100%); transition:transform .18s ease; display:flex; flex-direction:column;}
+        .drawer.open{transform:translateX(0);}
+        .drawer__top{display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--border);}
+        .drawer__close{margin-left:auto; width:34px; height:34px; border-radius:10px; border:1px solid var(--border); background:#fff; cursor:pointer;}
+        .drawer__close:hover{background:#f3f4f6;}
+        .drawer__title{font-weight:900; font-size:0.95rem;}
+        .drawer__tabs{display:flex; gap:14px; padding:0 16px; border-bottom:1px solid var(--border); align-items:flex-end;}
+        .drawer__tab{display:inline-flex; padding:12px 0; font-weight:800; color:var(--muted); border-bottom:2px solid transparent; cursor:pointer; user-select:none;}
+        .drawer__tab.active{color:var(--text); border-bottom-color:var(--primary);}
+        .drawer__content{padding:16px; overflow:auto; flex:1; min-height:0;}
+        .drawer__content .table thead th{background:#f7f8fb;}
 
         .msg {padding:10px 12px; border-radius:10px; margin:0 0 12px 0; border:1px solid var(--border); background:#fff;}
         .msg.success {border-color:#b7e4c7; background:#e9f7ef;}
@@ -181,6 +209,8 @@
         .m-0 {margin:0;}
 
         .fs-92 {font-size:0.92rem;}
+        .action-dots {display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:8px; border:1px solid var(--border); color:#1f3a8a;}
+        .action-dots:hover {background:#f3f4f6; text-decoration:none;}
 
         .avatar--lg {width:58px; height:58px;}
 
@@ -205,10 +235,11 @@
 <body>
     {% if user.is_authenticated %}
         <div class="app">
-            <aside class="sidebar" aria-label="Sidebar">
+            <aside class="sidebar {% block sidebar_class %}{% endblock %}" aria-label="Sidebar">
                 <div class="sidebar__brand">
                     <a href="{% url 'dashboard' %}">
                         <img src="{% static 'core/PAStrackLOGO.png' %}" alt="PAStrack" />
+                        <span class="brand-text">PAStrack</span>
                     </a>
                 </div>
 
@@ -217,32 +248,86 @@
                         <svg class="sideicon" viewBox="0 0 24 24" fill="none">
                             <path d="M4 13h7V4H4v9Zm0 7h7v-5H4v5Zm9 0h7V11h-7v9Zm0-18v7h7V2h-7Z" fill="currentColor"/>
                         </svg>
+                        <span class="sidelabel">Dashboard</span>
                     </a>
-                    {% if user.role|slice:":8" == 'capitol_' %}
-                        <a class="sideitem {% if request.resolver_match.url_name == 'submissions' %}active{% endif %}" href="{% url 'submissions' %}" title="Transactions">
+
+                    {% if user.role == 'capitol_receiving' %}
+                        <a class="sideitem" href="{% url 'dashboard' %}?tab=pending" title="Pending Transactions">
                             <svg class="sideicon" viewBox="0 0 24 24" fill="none">
                                 <path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm1 5h8v2H8V8Zm0 4h8v2H8v-2Zm0 4h6v2H8v-2Z" fill="currentColor"/>
                             </svg>
+                            <span class="sidelabel">Pending Transactions</span>
+                        </a>
+                        <a class="sideitem" href="{% url 'dashboard' %}?tab=received" title="Received Transactions">
+                            <svg class="sideicon" viewBox="0 0 24 24" fill="none">
+                                <path d="M6 4h12v2H6V4Zm0 14h12v2H6v-2Zm0-7h12v2H6v-2Z" fill="currentColor" opacity=".95"/>
+                            </svg>
+                            <span class="sidelabel">Received Transactions</span>
+                        </a>
+                        <a class="sideitem" href="{% url 'dashboard' %}?tab=received&status=received" title="For Assignment">
+                            <svg class="sideicon" viewBox="0 0 24 24" fill="none">
+                                <path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm-8 9a8 8 0 0 1 16 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                            <span class="sidelabel">For Assignment</span>
+                        </a>
+                        <a class="sideitem" href="{% url 'dashboard' %}#returned-to-me" title="Returned Transactions">
+                            <svg class="sideicon" viewBox="0 0 24 24" fill="none">
+                                <path d="M7 7h10v10H7V7Zm-3 5h3m13 0h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                            <span class="sidelabel">Returned Transactions</span>
+                        </a>
+                        <a class="sideitem {% if request.resolver_match.url_name == 'submissions' %}active{% endif %}" href="{% url 'submissions' %}" title="Transaction History">
+                            <svg class="sideicon" viewBox="0 0 24 24" fill="none">
+                                <path d="M6 3h12a2 2 0 0 1 2 2v16H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="2"/>
+                                <path d="M8 8h8M8 12h8M8 16h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                            <span class="sidelabel">Transaction History</span>
+                        </a>
+                        <a class="sideitem {% if request.resolver_match.url_name == 'staff_reports' %}active{% endif %}" href="{% url 'staff_reports' %}" title="Reports">
+                            <svg class="sideicon" viewBox="0 0 24 24" fill="none">
+                                <path d="M5 19V5m5 14V9m5 10V7m5 12V11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                            <span class="sidelabel">Reports</span>
+                        </a>
+                    {% elif user.role|slice:":8" == 'capitol_' %}
+                        <a class="sideitem {% if request.resolver_match.url_name == 'submissions' %}active{% endif %}" href="{% url 'submissions' %}" title="Transaction History">
+                            <svg class="sideicon" viewBox="0 0 24 24" fill="none">
+                                <path d="M6 3h12a2 2 0 0 1 2 2v16H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="2"/>
+                                <path d="M8 8h8M8 12h8M8 16h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                            <span class="sidelabel">Transaction History</span>
+                        </a>
+                        <a class="sideitem {% if request.resolver_match.url_name == 'staff_reports' %}active{% endif %}" href="{% url 'staff_reports' %}" title="Reports">
+                            <svg class="sideicon" viewBox="0 0 24 24" fill="none">
+                                <path d="M5 19V5m5 14V9m5 10V7m5 12V11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                            <span class="sidelabel">Reports</span>
                         </a>
                     {% endif %}
+
                     {% if user.role == 'lgu_admin' or user.role == 'capitol_receiving' %}
                         <a class="sideitem {% if request.resolver_match.url_name == 'drafts' %}active{% endif %}" href="{% url 'drafts' %}" title="Drafts">
                             <svg class="sideicon" viewBox="0 0 24 24" fill="none">
                                 <path d="M7 3h7l5 5v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm6 1v5h5" stroke="currentColor" stroke-width="2"/>
                             </svg>
+                            <span class="sidelabel">Drafts</span>
                         </a>
                     {% endif %}
+
                     {% if user.role == 'super_admin' %}
                         <a class="sideitem {% if request.resolver_match.url_name == 'user_management' or request.resolver_match.url_name == 'create_staff_account' or request.resolver_match.url_name == 'edit_staff_account' %}active{% endif %}" href="{% url 'user_management' %}" title="Users">
                             <svg class="sideicon" viewBox="0 0 24 24" fill="none">
                                 <path d="M16 11a4 4 0 1 0-8 0 4 4 0 0 0 8 0ZM4 21a8 8 0 0 1 16 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             </svg>
+                            <span class="sidelabel">Users</span>
                         </a>
                     {% endif %}
+
                     <a class="sideitem {% if request.resolver_match.url_name == 'profile' %}active{% endif %}" href="{% url 'profile' %}" title="Settings">
                         <svg class="sideicon" viewBox="0 0 24 24" fill="none">
                             <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM19.4 15a7.9 7.9 0 0 0 .1-2l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1l-.3-2.6H9l-.3 2.6a8 8 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7.9 7.9 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a8 8 0 0 0 1.7 1L9 22h6l.3-2.6a8 8 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5Z" fill="currentColor" opacity=".9"/>
                         </svg>
+                        <span class="sidelabel">Settings</span>
                     </a>
                 </nav>
 
