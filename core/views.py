@@ -817,8 +817,44 @@ def dashboard(request):
 
         if user.role == "capitol_receiving":
             tab = (request.GET.get("tab") or "").strip().lower() or "pending"
-            pending_qs = Case.objects.filter(status="not_received").order_by("-created_at")
-            received_qs = Case.objects.filter(status="received", assigned_to__isnull=True).order_by("-received_at")
+            q = (request.GET.get("q") or "").strip()
+            status_filter = (request.GET.get("status") or "").strip()
+            lgu_filter = (request.GET.get("lgu") or "").strip()
+            type_filter = (request.GET.get("case_type") or "").strip()
+
+            base_pending_qs = Case.objects.filter(status="not_received")
+            base_received_qs = Case.objects.filter(status="received", assigned_to__isnull=True)
+
+            if q:
+                base_pending_qs = base_pending_qs.filter(
+                    Q(tracking_id__icontains=q) |
+                    Q(client_name__icontains=q) |
+                    Q(client_email__icontains=q) |
+                    Q(submitted_by__lgu_municipality__icontains=q) |
+                    Q(case_type__icontains=q)
+                )
+                base_received_qs = base_received_qs.filter(
+                    Q(tracking_id__icontains=q) |
+                    Q(client_name__icontains=q) |
+                    Q(client_email__icontains=q) |
+                    Q(submitted_by__lgu_municipality__icontains=q) |
+                    Q(case_type__icontains=q)
+                )
+
+            if lgu_filter:
+                base_pending_qs = base_pending_qs.filter(submitted_by__lgu_municipality=lgu_filter)
+                base_received_qs = base_received_qs.filter(submitted_by__lgu_municipality=lgu_filter)
+
+            if type_filter:
+                base_pending_qs = base_pending_qs.filter(case_type=type_filter)
+                base_received_qs = base_received_qs.filter(case_type=type_filter)
+
+            if status_filter:
+                base_pending_qs = base_pending_qs.filter(status=status_filter)
+                base_received_qs = base_received_qs.filter(status=status_filter)
+
+            pending_qs = base_pending_qs.select_related("submitted_by").order_by("-created_at")
+            received_qs = base_received_qs.select_related("submitted_by").order_by("-received_at")
 
             pending_count = pending_qs.count()
             received_count = received_qs.count()
@@ -830,10 +866,37 @@ def dashboard(request):
                 paginator = Paginator(pending_qs, 10)
             page_obj = paginator.get_page(request.GET.get("page") or 1)
 
+            today = timezone.localdate()
+            stats_received_today = Case.objects.filter(received_by=user, received_at__date=today).count()
+            stats_pending_intake = Case.objects.filter(status="not_received").count()
+            stats_for_assignment = Case.objects.filter(status="received", assigned_to__isnull=True).count()
+            stats_returned_to_owner = Case.objects.filter(status="client_correction").count()
+            stats_total_handled = AuditLog.objects.filter(actor=user, action__in={"case_receipt", "case_assignment", "case_return"}).count()
+
+            ready_for_assignment = Case.objects.filter(status="received", assigned_to__isnull=True).select_related("submitted_by").order_by("-received_at")[:8]
+            returned_to_me = Case.objects.filter(returned_by=user).select_related("submitted_by").order_by("-returned_at")[:8]
+            recent_activity = AuditLog.objects.filter(actor=user).order_by("-created_at")[:10]
+
             context.update({
                 "tab": tab,
                 "tabs": [("pending", "Pending", pending_count), ("received", "Received", received_count)],
                 "page_obj": page_obj,
+                "filter_q": q,
+                "filter_status": status_filter,
+                "filter_lgu": lgu_filter,
+                "filter_case_type": type_filter,
+                "lgu_choices": CustomUser.LGU_MUNICIPALITY_CHOICES,
+                "case_type_choices": Case.CASE_TYPE_CHOICES,
+                "receiver_stats": {
+                    "received_today": stats_received_today,
+                    "pending_intake": stats_pending_intake,
+                    "for_assignment": stats_for_assignment,
+                    "returned_to_owner": stats_returned_to_owner,
+                    "total_handled": stats_total_handled,
+                },
+                "ready_for_assignment": ready_for_assignment,
+                "returned_to_me": returned_to_me,
+                "recent_activity": recent_activity,
             })
 
         elif user.role == "capitol_examiner":

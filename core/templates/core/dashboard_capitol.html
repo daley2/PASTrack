@@ -1,11 +1,36 @@
 {% extends "base.html" %}
 {% block title %}Capitol Staff Dashboard{% endblock %}
 
+{% block header_title %}Hi, {{ user.first_name|default:user.full_name|default:user.email }}!{% endblock %}
+{% block header_subtitle %}{{ user.username }} | {{ capitol_role }}{% endblock %}
+
+{% block header_actions %}
+    {% if user.role == 'capitol_receiving' or user.role == 'lgu_admin' %}
+        <a class="btn btn-primary btn-sm" href="{% url 'submit_case' %}">+ Create New Transaction</a>
+    {% endif %}
+    <div x-data="{ open:false }" style="position:relative;">
+        <button class="btn btn-link btn-sm" type="button" @click="open=!open">Refresh</button>
+        <div x-cloak x-show="open" @click.outside="open=false" style="position:absolute; right:0; top:42px; background:#fff; border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); padding:8px; min-width:220px;">
+            <button class="btn btn-secondary btn-sm" type="button" style="width:100%;" onclick="window.location.reload()">Refresh Now</button>
+            <button class="btn btn-secondary btn-sm" type="button" style="width:100%; margin-top:8px;" onclick="(function(){var k='pastrack_auto_refresh';var v=localStorage.getItem(k)==='1'?'0':'1';localStorage.setItem(k,v);window.location.reload();})()">Toggle Auto Refresh</button>
+        </div>
+    </div>
+{% endblock %}
+
 {% block content %}
-<div class="card">
-    <h2 class="page-title">{{ capitol_role }} Dashboard</h2>
-    <p class="page-subtitle">{{ user.full_name|default:user.email }}</p>
-</div>
+<style>
+    .statgrid{display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:16px;}
+    .statcard{background:#fff; border:1px solid var(--border); border-radius:14px; padding:14px; display:flex; gap:12px; align-items:center; box-shadow:var(--shadow);}
+    .staticon{width:44px; height:44px; border-radius:12px; background:rgba(24,19,74,.08); border:1px solid rgba(24,19,74,.10);}
+    .statnum{font-weight:900; font-size:1.2rem; margin:0; line-height:1;}
+    .statlabel{margin:6px 0 0 0; color:var(--muted); font-weight:800; font-size:.86rem;}
+    .section-title{margin:0; font-size:1.05rem; font-weight:900;}
+    .filters{background:#fff; border:1px solid var(--border); border-radius:14px; padding:12px; box-shadow:var(--shadow); margin-bottom:14px;}
+    .filters .searchbar{margin:0;}
+    .cards3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:16px;}
+    @media (max-width:1100px){.statgrid{grid-template-columns:repeat(2,1fr);} .cards3{grid-template-columns:1fr;}}
+    @media (max-width:760px){.statgrid{grid-template-columns:1fr;}}
+</style>
 
 {% if activity_counts %}
     <div class="card card--flat">
@@ -35,70 +60,216 @@
 {% endif %}
 
 {% if user.role == 'capitol_receiving' %}
-    <div class="card card--flat">
+    <div class="statgrid" aria-label="Summary">
+        <div class="statcard"><div class="staticon" aria-hidden="true"></div><div><p class="statnum">{{ receiver_stats.received_today }}</p><p class="statlabel">Received Today</p></div></div>
+        <div class="statcard"><div class="staticon" aria-hidden="true"></div><div><p class="statnum">{{ receiver_stats.pending_intake }}</p><p class="statlabel">Pending Intake</p></div></div>
+        <div class="statcard"><div class="staticon" aria-hidden="true"></div><div><p class="statnum">{{ receiver_stats.for_assignment }}</p><p class="statlabel">For Assignment</p></div></div>
+        <div class="statcard"><div class="staticon" aria-hidden="true"></div><div><p class="statnum">{{ receiver_stats.returned_to_owner }}</p><p class="statlabel">Returned to Owner</p></div></div>
+        <div class="statcard"><div class="staticon" aria-hidden="true"></div><div><p class="statnum">{{ receiver_stats.total_handled }}</p><p class="statlabel">Total Transactions Handled</p></div></div>
+    </div>
+
+    <div class="filters">
+        <form method="get" class="searchbar m-0">
+            <input type="hidden" name="tab" value="{{ tab }}" />
+            <div class="grow">
+                <label for="id_q">Search</label>
+                <input id="id_q" name="q" value="{{ filter_q }}" placeholder="Case Number, Owner Name, LGU Origin, or Transaction Type" />
+            </div>
+            <div style="min-width:160px;">
+                <label for="id_status">Status</label>
+                <select id="id_status" name="status">
+                    <option value="">All</option>
+                    <option value="not_received" {% if filter_status == "not_received" %}selected{% endif %}>Pending</option>
+                    <option value="received" {% if filter_status == "received" %}selected{% endif %}>Received</option>
+                </select>
+            </div>
+            <div style="min-width:200px;">
+                <label for="id_lgu">LGU Origin</label>
+                <select id="id_lgu" name="lgu">
+                    <option value="">All</option>
+                    {% for v,l in lgu_choices %}
+                        <option value="{{ v }}" {% if filter_lgu == v %}selected{% endif %}>{{ l }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div style="min-width:200px;">
+                <label for="id_type">Request Type</label>
+                <select id="id_type" name="case_type">
+                    <option value="">All</option>
+                    {% for v,l in case_type_choices %}
+                        <option value="{{ v }}" {% if filter_case_type == v %}selected{% endif %}>{{ l }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <button class="btn btn-primary" type="submit">Apply</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="card card--flat card-elevated">
         <div class="card__header">
-            <strong>Receiving Queue</strong>
-            <span style="margin-left:auto;"><a class="btn btn-primary btn-sm" href="{% url 'submit_case' %}">+ New Transaction</a></span>
-        </div>
-        <div class="card__body card__body--flush">
-            <div class="card__body" style="padding:14px 16px;">
-                <div class="subtabs" aria-label="Receiving tabs">
+            <strong class="section-title">{% if tab == 'received' %}Received Transactions{% else %}Pending Requests{% endif %}</strong>
+            <span style="margin-left:auto;" class="muted">
+                <div class="subtabs" style="margin:0;">
                     {% for key,label,count in tabs %}
                         <a href="?tab={{ key }}"><span class="{% if tab == key %}active{% endif %}">{{ label }} ({{ count }})</span></a>
                     {% endfor %}
                 </div>
-            </div>
+            </span>
+        </div>
 
+        <div class="card__body card__body--flush">
             {% if page_obj and page_obj.object_list %}
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th style="width:22%">Tracking No.</th>
-                        <th>Owner</th>
-                        <th style="width:18%">Status</th>
-                        <th style="width:18%">{% if tab == 'received' %}Received{% else %}Created{% endif %}</th>
-                        <th style="width:14%">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for case in page_obj.object_list %}
+                <table class="table">
+                    <thead>
                         <tr>
-                            <td><strong><a href="{% url 'case_detail' case.tracking_id %}">{{ case.tracking_id }}</a></strong></td>
-                            <td>{{ case.client_display_name }}</td>
-                            <td class="muted">{{ case.get_status_display }}</td>
-                            <td class="muted">
-                                {% if tab == 'received' %}
-                                    {% if case.received_at %}{{ case.received_at|date:"M d, Y H:i" }}{% else %}—{% endif %}
-                                {% else %}
-                                    {{ case.created_at|date:"M d, Y H:i" }}
-                                {% endif %}
-                            </td>
-                            <td><a class="btn btn-secondary btn-sm" href="{% url 'case_detail' case.tracking_id %}">Open</a></td>
+                            <th style="width:22%">Case Number</th>
+                            <th>Owner Name</th>
+                            <th style="width:18%">Request Type</th>
+                            <th style="width:14%">LGU Origin</th>
+                            <th style="width:14%">Date Submitted</th>
+                            <th style="width:18%">Actions</th>
                         </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        {% for case in page_obj.object_list %}
+                            <tr>
+                                <td><strong><a href="{% url 'case_detail' case.tracking_id %}">{{ case.tracking_id }}</a></strong></td>
+                                <td>{{ case.client_display_name }}</td>
+                                <td class="muted">{{ case.get_case_type_display|default:"—" }}</td>
+                                <td class="muted">{{ case.submitted_by.lgu_municipality|default:"—" }}</td>
+                                <td class="muted">{{ case.created_at|date:"m/d/Y" }}</td>
+                                <td class="row" style="gap:8px;">
+                                    <a class="btn btn-link btn-sm" href="{% url 'case_detail' case.tracking_id %}">Quick View</a>
+                                    <a class="btn btn-link btn-sm" href="{% url 'case_detail' case.tracking_id %}#documents">Preview Docs</a>
+                                    {% if tab == 'pending' %}
+                                        <form method="post" action="{% url 'receive_case' case.tracking_id %}" style="margin:0;">
+                                            {% csrf_token %}
+                                            <button class="btn btn-link btn-sm" type="submit">Receive</button>
+                                        </form>
+                                    {% else %}
+                                        <a class="btn btn-link btn-sm" href="{% url 'case_detail' case.tracking_id %}">Open</a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
 
-            {% if page_obj.has_other_pages %}
-                <div class="pagination">
-                    {% if page_obj.has_previous %}
-                        <a class="pagepill" href="?tab={{ tab }}&page={{ page_obj.previous_page_number }}">Prev</a>
-                    {% endif %}
-                    {% for n in page_obj.paginator.page_range %}
-                        {% if n == page_obj.number %}
-                            <span class="pagepill active">{{ n }}</span>
-                        {% elif n <= 10 %}
-                            <a class="pagepill" href="?tab={{ tab }}&page={{ n }}">{{ n }}</a>
+                {% if page_obj.has_other_pages %}
+                    <div class="pagination">
+                        {% if page_obj.has_previous %}
+                            <a class="pagepill" href="?tab={{ tab }}&page={{ page_obj.previous_page_number }}">Prev</a>
                         {% endif %}
-                    {% endfor %}
-                    {% if page_obj.has_next %}
-                        <a class="pagepill" href="?tab={{ tab }}&page={{ page_obj.next_page_number }}">Next</a>
-                    {% endif %}
-                </div>
-            {% endif %}
+                        {% for n in page_obj.paginator.page_range %}
+                            {% if n == page_obj.number %}
+                                <span class="pagepill active">{{ n }}</span>
+                            {% elif n <= 10 %}
+                                <a class="pagepill" href="?tab={{ tab }}&page={{ n }}">{{ n }}</a>
+                            {% endif %}
+                        {% endfor %}
+                        {% if page_obj.has_next %}
+                            <a class="pagepill" href="?tab={{ tab }}&page={{ page_obj.next_page_number }}">Next</a>
+                        {% endif %}
+                    </div>
+                {% endif %}
             {% else %}
-                <div class="card__body"><p class="muted" style="margin:0;">No transactions found for this tab.</p></div>
+                <div class="card__body"><p class="muted" style="margin:0;">No transactions found.</p></div>
             {% endif %}
+        </div>
+    </div>
+
+    <div class="cards3">
+        <div class="card card--flat card-elevated">
+            <div class="card__header">
+                <strong class="section-title">Ready for Assignment</strong>
+                <span class="muted" style="margin-left:auto;">See All</span>
+            </div>
+            <div class="card__body card__body--flush">
+                {% if ready_for_assignment %}
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Case Number</th>
+                                <th style="width:30%">Date Received</th>
+                                <th style="width:22%">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for case in ready_for_assignment %}
+                                <tr>
+                                    <td><a href="{% url 'case_detail' case.tracking_id %}">{{ case.tracking_id }}</a></td>
+                                    <td class="muted">{% if case.received_at %}{{ case.received_at|date:"m/d/Y" }}{% else %}—{% endif %}</td>
+                                    <td><a class="btn btn-link btn-sm" href="{% url 'case_detail' case.tracking_id %}">Assign</a></td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <div class="card__body"><p class="muted" style="margin:0;">No transactions.</p></div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card card--flat card-elevated">
+            <div class="card__header">
+                <strong class="section-title">Returned to Me</strong>
+            </div>
+            <div class="card__body card__body--flush">
+                {% if returned_to_me %}
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Case Number</th>
+                                <th style="width:30%">Date Returned</th>
+                                <th style="width:22%">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for case in returned_to_me %}
+                                <tr>
+                                    <td><a href="{% url 'case_detail' case.tracking_id %}">{{ case.tracking_id }}</a></td>
+                                    <td class="muted">{% if case.returned_at %}{{ case.returned_at|date:"m/d/Y" }}{% else %}—{% endif %}</td>
+                                    <td><a class="btn btn-link btn-sm" href="{% url 'case_detail' case.tracking_id %}#remarks">View Remarks</a></td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <div class="card__body"><p class="muted" style="margin:0;">No transactions.</p></div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card card--flat card-elevated">
+            <div class="card__header">
+                <strong class="section-title">Recent Activity</strong>
+            </div>
+            <div class="card__body card__body--flush">
+                {% if recent_activity %}
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th style="width:34%">Timestamp</th>
+                                <th style="width:22%">Case Number</th>
+                                <th>Activity</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for a in recent_activity %}
+                                <tr>
+                                    <td class="muted">{{ a.created_at|date:"m/d/y  g:i A" }}</td>
+                                    <td class="muted">{{ a.target_object|default:"—" }}</td>
+                                    <td>{{ a.get_action_display|default:a.action }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <div class="card__body"><p class="muted" style="margin:0;">No activity yet.</p></div>
+                {% endif %}
+            </div>
         </div>
     </div>
 
@@ -308,5 +479,22 @@
     </div>
 {% else %}
     <div class="card"><p class="muted" style="margin:0;">Your work queue will be shown here after we build your workflow module.</p></div>
+{% endif %}
+
+{% if user.role == 'capitol_receiving' %}
+    {% block extra_js %}
+        <script>
+            (function () {
+                var k = 'pastrack_auto_refresh';
+                var enabled = localStorage.getItem(k);
+                if (enabled === null) localStorage.setItem(k, '1');
+                enabled = localStorage.getItem(k) === '1';
+                if (!enabled) return;
+                setInterval(function () {
+                    try { window.location.reload(); } catch (e) {}
+                }, 15000);
+            })();
+        </script>
+    {% endblock %}
 {% endif %}
 {% endblock %}

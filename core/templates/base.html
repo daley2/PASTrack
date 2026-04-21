@@ -9,7 +9,7 @@
     <style>
         [x-cloak] { display: none !important; }
         :root {
-            --bg: #f6f6f6;
+            --bg: #f5f7fb;
             --card: #ffffff;
             --text: #111111;
             --muted: #6b7280;
@@ -18,6 +18,8 @@
             --primary: #18134a;
             --accent: #f7d400;
             --danger: #b42318;
+            --sidebar: #ffffff;
+            --shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
         }
 
         * { box-sizing: border-box; }
@@ -25,22 +27,51 @@
         a {color:inherit; text-decoration:none;}
         a:hover {text-decoration:underline;}
 
-        .topbar {background:#fff; border-bottom:1px solid var(--border);}
-        .topbar__inner {max-width:1100px; margin:0 auto; padding:12px 16px; display:flex; align-items:center; gap:14px; flex-wrap:nowrap;}
-        .brand {display:flex; align-items:center; gap:10px; font-weight:700;}
-        .brand__logo {height:28px; width:auto; display:block;}
+        .app {min-height:100vh; display:flex;}
+        .sidebar {
+            width:92px;
+            background:var(--sidebar);
+            border-right:1px solid var(--border);
+            display:flex;
+            flex-direction:column;
+            padding:18px 14px;
+            gap:14px;
+        }
+        .sidebar__brand {display:flex; justify-content:center;}
+        .sidebar__brand img {height:44px; width:auto; display:block;}
+        .sidebar__nav {display:flex; flex-direction:column; gap:10px; margin-top:6px;}
+        .sideitem {
+            width:100%;
+            height:44px;
+            border-radius:12px;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            border:1px solid transparent;
+            color:var(--muted);
+        }
+        .sideitem.active {background:rgba(24,19,74,0.08); border-color:rgba(24,19,74,0.14); color:var(--primary); text-decoration:none;}
+        .sideitem:hover {text-decoration:none; background:#f3f4f6;}
+        .sideicon {width:20px; height:20px; display:block;}
+        .sidebar__spacer {flex:1;}
+        .app-main {flex:1; min-width:0; display:flex; flex-direction:column;}
+        .app-header {
+            background:transparent;
+            padding:18px 22px;
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:12px;
+        }
+        .header-user {min-width:0;}
+        .header-user__title {font-size:1.35rem; font-weight:800; margin:0;}
+        .header-user__subtitle {margin:2px 0 0 0; color:var(--muted); font-weight:700; font-size:0.92rem;}
+        .header-actions {display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end;}
 
-        .navpills {display:flex; gap:8px; align-items:center; flex-wrap:nowrap; justify-content:center; flex:1; min-width:0; margin:0 auto; white-space:nowrap;}
-        .navpills a {padding:7px 12px; border-radius:10px; border:1px solid transparent; font-weight:700; font-size:0.92rem; color:var(--muted);}
-        .navpills a.active {background:var(--primary); color:var(--accent); text-decoration:none;}
-        .navpills a:hover,
-        .navpills a:focus-visible {text-decoration:none; background:var(--primary); border-color:var(--primary); color:#fff; outline:none;}
-
-        .topbar__right {display:flex; align-items:center; gap:10px; margin-left:auto; flex:0 0 auto;}
         .userchip {display:flex; align-items:center; gap:8px; color:var(--muted); font-weight:600; font-size:0.92rem;}
         .avatar {width:26px; height:26px; border-radius:999px; background:#e5e7eb; border:1px solid var(--border);}
 
-        .container {max-width:1100px; margin:22px auto; padding:0 16px;}
+        .container {max-width:1320px; margin:0 auto; padding:0 22px 22px 22px; width:100%;}
         .container--narrow {max-width:620px;}
 
         .page-title {margin:0 0 8px 0; font-size:1.35rem;}
@@ -52,6 +83,8 @@
         .card__body {padding:16px;}
         .card__body--flush {padding:0;}
 
+        .card-elevated {box-shadow: var(--shadow);}
+
         .btn {display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 14px; border-radius:10px; border:1px solid var(--border-strong); background:#fff; cursor:pointer; font-weight:700;}
         .btn-primary {background:var(--primary); color:#fff; border-color:var(--primary);}
         .btn-primary:hover {background:#120d3b; border-color:#120d3b;}
@@ -60,6 +93,8 @@
         .btn-success:hover {background:#05603a; border-color:#05603a;}
         .btn-danger {background:var(--danger); color:#fff; border-color:var(--danger);}
         .btn-sm {padding:7px 10px; border-radius:9px; font-weight:700; font-size:0.9rem;}
+        .btn-link {background:transparent; border-color:transparent; color:var(--muted); padding:6px 10px;}
+        .btn-link:hover {background:#f3f4f6; color:var(--text);}
         .btn:disabled {opacity:.55; cursor:not-allowed;}
         .btn:hover {text-decoration:none;}
         .btn-secondary:hover {background:#f3f4f6;}
@@ -155,69 +190,106 @@
         .pagepill:hover {text-decoration:none; color:var(--text);}
 
         @media (max-width: 900px) {
-            .topbar__inner {flex-wrap:wrap;}
-            .navpills {width:100%; justify-content:flex-start; flex-wrap:wrap; white-space:normal;}
-            .topbar__right {margin-left:0; width:100%; justify-content:space-between;}
+            .sidebar {width:72px; padding:14px 10px;}
+            .sidebar__brand img {height:38px;}
+            .app-header {padding:16px;}
+            .container {padding:0 16px 16px 16px;}
         }
 
         @media (max-width: 760px) {
             .table {display:block; width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch;}
+            .header-user__title {font-size:1.15rem;}
         }
     </style>
 </head>
 <body>
-    <header class="topbar">
-        <div class="topbar__inner">
-            <a class="brand" href="{% url 'landing' %}">
-                <img class="brand__logo" src="{% static 'core/PAStrackLOGO.png' %}" alt="PAStrack" />
-            </a>
+    {% if user.is_authenticated %}
+        <div class="app">
+            <aside class="sidebar" aria-label="Sidebar">
+                <div class="sidebar__brand">
+                    <a href="{% url 'dashboard' %}">
+                        <img src="{% static 'core/PAStrackLOGO.png' %}" alt="PAStrack" />
+                    </a>
+                </div>
 
-            {% if user.is_authenticated %}
-                <nav class="navpills" aria-label="Primary">
-                    <a href="{% url 'dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">Dashboard</a>
+                <nav class="sidebar__nav" aria-label="Primary">
+                    <a class="sideitem {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}" title="Dashboard">
+                        <svg class="sideicon" viewBox="0 0 24 24" fill="none">
+                            <path d="M4 13h7V4H4v9Zm0 7h7v-5H4v5Zm9 0h7V11h-7v9Zm0-18v7h7V2h-7Z" fill="currentColor"/>
+                        </svg>
+                    </a>
                     {% if user.role|slice:":8" == 'capitol_' %}
-                        <a href="{% url 'submissions' %}" class="{% if request.resolver_match.url_name == 'submissions' %}active{% endif %}">Submissions</a>
+                        <a class="sideitem {% if request.resolver_match.url_name == 'submissions' %}active{% endif %}" href="{% url 'submissions' %}" title="Transactions">
+                            <svg class="sideicon" viewBox="0 0 24 24" fill="none">
+                                <path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm1 5h8v2H8V8Zm0 4h8v2H8v-2Zm0 4h6v2H8v-2Z" fill="currentColor"/>
+                            </svg>
+                        </a>
                     {% endif %}
                     {% if user.role == 'lgu_admin' or user.role == 'capitol_receiving' %}
-                        <a href="{% url 'drafts' %}" class="{% if request.resolver_match.url_name == 'drafts' %}active{% endif %}">Drafts</a>
+                        <a class="sideitem {% if request.resolver_match.url_name == 'drafts' %}active{% endif %}" href="{% url 'drafts' %}" title="Drafts">
+                            <svg class="sideicon" viewBox="0 0 24 24" fill="none">
+                                <path d="M7 3h7l5 5v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm6 1v5h5" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                        </a>
                     {% endif %}
                     {% if user.role == 'super_admin' %}
-                        <a href="{% url 'user_management' %}" class="{% if request.resolver_match.url_name == 'user_management' or request.resolver_match.url_name == 'create_staff_account' or request.resolver_match.url_name == 'edit_staff_account' %}active{% endif %}">User Management</a>
-                        <a href="{% url 'audit_logs' %}" class="{% if request.resolver_match.url_name == 'audit_logs' %}active{% endif %}">Audit Logs</a>
-                        <a href="{% url 'analytics_dashboard' %}" class="{% if request.resolver_match.url_name == 'analytics_dashboard' %}active{% endif %}">Analytics</a>
-                        <a href="{% url 'reports' %}" class="{% if request.resolver_match.url_name == 'reports' %}active{% endif %}">Reports</a>
+                        <a class="sideitem {% if request.resolver_match.url_name == 'user_management' or request.resolver_match.url_name == 'create_staff_account' or request.resolver_match.url_name == 'edit_staff_account' %}active{% endif %}" href="{% url 'user_management' %}" title="Users">
+                            <svg class="sideicon" viewBox="0 0 24 24" fill="none">
+                                <path d="M16 11a4 4 0 1 0-8 0 4 4 0 0 0 8 0ZM4 21a8 8 0 0 1 16 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </a>
                     {% endif %}
+                    <a class="sideitem {% if request.resolver_match.url_name == 'profile' %}active{% endif %}" href="{% url 'profile' %}" title="Settings">
+                        <svg class="sideicon" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM19.4 15a7.9 7.9 0 0 0 .1-2l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1l-.3-2.6H9l-.3 2.6a8 8 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7.9 7.9 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a8 8 0 0 0 1.7 1L9 22h6l.3-2.6a8 8 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5Z" fill="currentColor" opacity=".9"/>
+                        </svg>
+                    </a>
                 </nav>
 
-                <div class="topbar__right">
-                    <div class="userchip" title="{{ user.email }}">
-                        <span class="avatar" aria-hidden="true"></span>
-                        <span>{{ user.full_name|default:user.email }}</span>
-                    </div>
-                    <a class="btn btn-secondary btn-sm" href="{% url 'profile' %}">Profile</a>
-                    <form method="post" action="{% url 'logout' %}" style="margin:0;">
-                        {% csrf_token %}
-                        <button class="btn btn-secondary btn-sm" type="submit">Logout</button>
-                    </form>
-                </div>
-            {% else %}
-                <div class="topbar__right">
-                    {% if request.resolver_match.url_name != 'login' %}
-                        <a class="btn btn-primary btn-sm" href="{% url 'login' %}">Staff Login</a>
-                    {% endif %}
-                </div>
-            {% endif %}
-        </div>
-    </header>
+                <div class="sidebar__spacer"></div>
 
-    <main class="container {% block container_class %}{% endblock %}">
-        {% if messages %}
-            {% for msg in messages %}
-                <div class="msg {{ msg.tags|default:'info' }}">{{ msg }}</div>
-            {% endfor %}
-        {% endif %}
-        {% block content %}{% endblock %}
-    </main>
+                <form method="post" action="{% url 'logout' %}" style="margin:0;">
+                    {% csrf_token %}
+                    <button class="sideitem" type="submit" title="Logout" aria-label="Logout">
+                        <svg class="sideicon" viewBox="0 0 24 24" fill="none">
+                            <path d="M10 7V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M3 12h11m0 0-3-3m3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                </form>
+            </aside>
+
+            <div class="app-main">
+                <header class="app-header">
+                    <div class="header-user">
+                        <h1 class="header-user__title">{% block header_title %}{{ user.full_name|default:user.email }}{% endblock %}</h1>
+                        <p class="header-user__subtitle">{% block header_subtitle %}{{ user.username }} | {{ user.get_role_display }}{% endblock %}</p>
+                    </div>
+                    <div class="header-actions">
+                        {% block header_actions %}{% endblock %}
+                    </div>
+                </header>
+
+                <main class="container {% block container_class %}{% endblock %}">
+                    {% if messages %}
+                        {% for msg in messages %}
+                            <div class="msg {{ msg.tags|default:'info' }}">{{ msg }}</div>
+                        {% endfor %}
+                    {% endif %}
+                    {% block content %}{% endblock %}
+                </main>
+            </div>
+        </div>
+    {% else %}
+        <main class="container {% block container_class_anon %}{% endblock %}">
+            {% if messages %}
+                {% for msg in messages %}
+                    <div class="msg {{ msg.tags|default:'info' }}">{{ msg }}</div>
+                {% endfor %}
+            {% endif %}
+            {% block content %}{% endblock %}
+        </main>
+    {% endif %}
 
     <script>
         (function () {
