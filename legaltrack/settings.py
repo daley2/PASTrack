@@ -260,8 +260,12 @@ def _database_from_url(database_url: str) -> dict[str, object]:
 
     query = dict(parse_qsl(parsed.query, keep_blank_values=True))
     options = {}
-    if "sslmode" in query:
+    # Supabase-managed Postgres requires SSL. If sslmode isn't specified,
+    # default to "require" in non-debug environments to avoid runtime 500s.
+    if "sslmode" in query and query.get("sslmode") is not None:
         options["sslmode"] = query["sslmode"]
+    elif not DEBUG:
+        options["sslmode"] = "require"
 
     config: dict[str, object] = {
         "ENGINE": engine,
