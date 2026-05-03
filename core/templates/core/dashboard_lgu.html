@@ -13,6 +13,33 @@
     </div>
 </div>
 
+{% if stat_cards %}
+    <div class="statgrid" aria-label="Summary">
+        {% for s in stat_cards %}
+            <div class="statcard">
+                <div class="staticon" aria-hidden="true"></div>
+                <div>
+                    <p class="statnum">{{ s.value }}</p>
+                    <p class="statlabel">{{ s.label }}</p>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+{% endif %}
+
+<div class="filters">
+    <form method="get" class="searchbar m-0">
+        <input type="hidden" name="tab" value="{{ tab }}" />
+        <div class="grow">
+            <label for="id_q">Search</label>
+            <input id="id_q" name="q" value="{{ filter_q }}" placeholder="Search by Transaction No., Owner Name, LGU Origin, or Transaction Type" />
+        </div>
+        <div>
+            <button class="btn btn-primary" type="submit">Apply</button>
+        </div>
+    </form>
+</div>
+
 <div class="card card--flat card-elevated">
     <div class="card__header">
         <strong>Your Submissions (Status Breakdown)</strong>
@@ -43,7 +70,7 @@
         <div class="card__body" style="padding:14px 16px;">
             <div class="subtabs" aria-label="LGU dashboard tabs">
                 {% for key,label,count in tabs %}
-                    <a href="?tab={{ key }}"><span class="{% if tab == key %}active{% endif %}">{{ label }} ({{ count }})</span></a>
+                    <a href="?tab={{ key }}{% if filter_q %}&q={{ filter_q|urlencode }}{% endif %}"><span class="{% if tab == key %}active{% endif %}">{{ label }} ({{ count }})</span></a>
                 {% endfor %}
             </div>
         </div>
@@ -84,17 +111,17 @@
             {% if page_obj.has_other_pages %}
                 <div class="pagination">
                     {% if page_obj.has_previous %}
-                        <a class="pagepill" href="?tab={{ tab }}&page={{ page_obj.previous_page_number }}">Prev</a>
+                        <a class="pagepill" href="?tab={{ tab }}{% if filter_q %}&q={{ filter_q|urlencode }}{% endif %}&page={{ page_obj.previous_page_number }}">Prev</a>
                     {% endif %}
                     {% for n in page_obj.paginator.page_range %}
                         {% if n == page_obj.number %}
                             <span class="pagepill active">{{ n }}</span>
                         {% elif n <= 10 %}
-                            <a class="pagepill" href="?tab={{ tab }}&page={{ n }}">{{ n }}</a>
+                            <a class="pagepill" href="?tab={{ tab }}{% if filter_q %}&q={{ filter_q|urlencode }}{% endif %}&page={{ n }}">{{ n }}</a>
                         {% endif %}
                     {% endfor %}
                     {% if page_obj.has_next %}
-                        <a class="pagepill" href="?tab={{ tab }}&page={{ page_obj.next_page_number }}">Next</a>
+                        <a class="pagepill" href="?tab={{ tab }}{% if filter_q %}&q={{ filter_q|urlencode }}{% endif %}&page={{ page_obj.next_page_number }}">Next</a>
                     {% endif %}
                 </div>
             {% endif %}

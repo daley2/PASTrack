@@ -9,7 +9,7 @@
     <div class="card" style="margin-top:14px;">
         <table class="table">
             <tbody>
-                <tr><td style="width:40%" class="muted"><strong>Owner</strong></td><td>{{ case.client_display_name }}</td></tr>
+                <tr><td style="width:40%" class="muted"><strong>Full Name</strong></td><td>{{ case.client_display_name }}</td></tr>
                 <tr><td class="muted"><strong>Phone Number</strong></td><td>{{ case.client_number|default:"—" }}</td></tr>
                 <tr><td class="muted"><strong>Email</strong></td><td>{{ case.client_email|default:"—" }}</td></tr>
                 <tr><td class="muted"><strong>Date Submitted</strong></td><td>{{ case.created_at|date:"F d, Y" }}</td></tr>
@@ -47,6 +47,34 @@
             </table>
         </div>
     </div>
+
+    {% if show_internal and remarks %}
+        <div class="card card--flat" style="margin-top:14px;">
+            <div class="card__header">
+                <strong>Internal Remarks</strong>
+            </div>
+            <div class="card__body card__body--flush">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Remark</th>
+                            <th style="width:28%">By</th>
+                            <th style="width:28%">When</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in remarks|slice:":5" %}
+                            <tr>
+                                <td>{{ r.text|linebreaksbr }}</td>
+                                <td class="muted">{{ r.created_by|default:"—" }}</td>
+                                <td class="muted">{{ r.created_at|date:"m/d/y  g:i A" }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endif %}
 </div>
 
 <div data-drawer-fragment="documents">

@@ -19,22 +19,6 @@
 {% endblock %}
 
 {% block content %}
-<style>
-    .statgrid{display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:16px;}
-    .statcard{background:#fff; border:1px solid var(--border); border-radius:14px; padding:16px; display:flex; gap:14px; align-items:center; box-shadow:var(--shadow);}
-    .staticon{width:48px; height:48px; border-radius:14px; background:rgba(31,58,138,.08); border:1px solid rgba(31,58,138,.10);}
-    .statnum{font-weight:900; font-size:1.2rem; margin:0; line-height:1;}
-    .statlabel{margin:6px 0 0 0; color:var(--muted); font-weight:800; font-size:.86rem;}
-    .section-title{margin:0; font-size:1.05rem; font-weight:900;}
-    .filters{background:#fff; border:1px solid var(--border); border-radius:14px; padding:12px; box-shadow:var(--shadow); margin-bottom:14px;}
-    .filters .searchbar{margin:0;}
-    .filters-row{display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;}
-    .filters-row > *{min-width:170px;}
-    .cards3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:16px;}
-    @media (max-width:1100px){.statgrid{grid-template-columns:repeat(2,1fr);} .cards3{grid-template-columns:1fr;}}
-    @media (max-width:760px){.statgrid{grid-template-columns:1fr;}}
-</style>
-
 {% if activity_counts %}
     <div class="card card--flat">
         <div class="card__header">
@@ -62,15 +46,21 @@
     </div>
 {% endif %}
 
-{% if user.role == 'capitol_receiving' %}
+{% if stat_cards %}
     <div class="statgrid" aria-label="Summary">
-        <div class="statcard"><div class="staticon" aria-hidden="true"></div><div><p class="statnum">{{ receiver_stats.received_today }}</p><p class="statlabel">Received Today</p></div></div>
-        <div class="statcard"><div class="staticon" aria-hidden="true"></div><div><p class="statnum">{{ receiver_stats.pending_intake }}</p><p class="statlabel">Pending Intake</p></div></div>
-        <div class="statcard"><div class="staticon" aria-hidden="true"></div><div><p class="statnum">{{ receiver_stats.for_assignment }}</p><p class="statlabel">For Assignment</p></div></div>
-        <div class="statcard"><div class="staticon" aria-hidden="true"></div><div><p class="statnum">{{ receiver_stats.returned_to_owner }}</p><p class="statlabel">Returned to Owner</p></div></div>
-        <div class="statcard"><div class="staticon" aria-hidden="true"></div><div><p class="statnum">{{ receiver_stats.total_handled }}</p><p class="statlabel">Total Transactions Handled</p></div></div>
+        {% for s in stat_cards %}
+            <div class="statcard">
+                <div class="staticon" aria-hidden="true"></div>
+                <div>
+                    <p class="statnum">{{ s.value }}</p>
+                    <p class="statlabel">{{ s.label }}</p>
+                </div>
+            </div>
+        {% endfor %}
     </div>
+{% endif %}
 
+{% if user.role == 'capitol_receiving' %}
     <div class="filters">
         <form method="get" class="searchbar m-0">
             <input type="hidden" name="tab" value="{{ tab }}" />
@@ -166,17 +156,17 @@
                 {% if page_obj.has_other_pages %}
                     <div class="pagination">
                         {% if page_obj.has_previous %}
-                            <a class="pagepill" href="?tab={{ tab }}&page={{ page_obj.previous_page_number }}">Prev</a>
+                            <a class="pagepill" href="?tab={{ tab }}{% if filter_q %}&q={{ filter_q|urlencode }}{% endif %}{% if filter_status %}&status={{ filter_status|urlencode }}{% endif %}{% if filter_lgu %}&lgu={{ filter_lgu|urlencode }}{% endif %}{% if filter_case_type %}&case_type={{ filter_case_type|urlencode }}{% endif %}&page={{ page_obj.previous_page_number }}">Prev</a>
                         {% endif %}
                         {% for n in page_obj.paginator.page_range %}
                             {% if n == page_obj.number %}
                                 <span class="pagepill active">{{ n }}</span>
                             {% elif n <= 10 %}
-                                <a class="pagepill" href="?tab={{ tab }}&page={{ n }}">{{ n }}</a>
+                                <a class="pagepill" href="?tab={{ tab }}{% if filter_q %}&q={{ filter_q|urlencode }}{% endif %}{% if filter_status %}&status={{ filter_status|urlencode }}{% endif %}{% if filter_lgu %}&lgu={{ filter_lgu|urlencode }}{% endif %}{% if filter_case_type %}&case_type={{ filter_case_type|urlencode }}{% endif %}&page={{ n }}">{{ n }}</a>
                             {% endif %}
                         {% endfor %}
                         {% if page_obj.has_next %}
-                            <a class="pagepill" href="?tab={{ tab }}&page={{ page_obj.next_page_number }}">Next</a>
+                            <a class="pagepill" href="?tab={{ tab }}{% if filter_q %}&q={{ filter_q|urlencode }}{% endif %}{% if filter_status %}&status={{ filter_status|urlencode }}{% endif %}{% if filter_lgu %}&lgu={{ filter_lgu|urlencode }}{% endif %}{% if filter_case_type %}&case_type={{ filter_case_type|urlencode }}{% endif %}&page={{ page_obj.next_page_number }}">Next</a>
                         {% endif %}
                     </div>
                 {% endif %}
@@ -280,29 +270,72 @@
     </div>
 
 {% elif user.role == 'capitol_examiner' %}
+    <div class="filters">
+        <form method="get" class="searchbar m-0">
+            <div class="grow">
+                <label for="id_q">Search</label>
+                <input id="id_q" name="q" value="{{ filter_q }}" placeholder="Search by Transaction No., Owner Name, LGU Origin, or Transaction Type" />
+            </div>
+            <div class="filters-row">
+                <div>
+                    <label for="id_status">Status</label>
+                    <select id="id_status" name="status">
+                        <option value="">All</option>
+                        {% for v,l in status_choices %}
+                            <option value="{{ v }}" {% if filter_status == v %}selected{% endif %}>{{ l }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="id_lgu">LGU Origin</label>
+                    <select id="id_lgu" name="lgu">
+                        <option value="">All</option>
+                        {% for v,l in lgu_choices %}
+                            <option value="{{ v }}" {% if filter_lgu == v %}selected{% endif %}>{{ l }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="id_type">Request Type</label>
+                    <select id="id_type" name="case_type">
+                        <option value="">All</option>
+                        {% for v,l in case_type_choices %}
+                            <option value="{{ v }}" {% if filter_case_type == v %}selected{% endif %}>{{ l }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label>&nbsp;</label>
+                    <button class="btn btn-primary" type="submit">Apply</button>
+                </div>
+            </div>
+        </form>
+    </div>
     <div class="card card--flat card-elevated">
         <div class="card__header">
             <strong>My Assigned Transactions</strong>
         </div>
         <div class="card__body card__body--flush">
-            {% if my_cases %}
+            {% if page_obj and page_obj.object_list %}
                 <table class="table">
                     <thead>
                         <tr>
-                            <th style="width:22%">Tracking No.</th>
+                            <th style="width:22%">Transaction No.</th>
                             <th>Owner</th>
+                            <th style="width:18%">Request Type</th>
+                            <th style="width:18%">LGU Origin</th>
                             <th style="width:18%">Status</th>
-                            <th style="width:20%">Assigned</th>
                             <th style="width:14%">Action</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for case in my_cases %}
+                        {% for case in page_obj.object_list %}
                             <tr>
                                 <td><strong><a href="{% url 'case_detail' case.tracking_id %}">{{ case.tracking_id }}</a></strong></td>
                                 <td>{{ case.client_display_name }}</td>
+                                <td class="muted">{{ case.get_case_type_display|default:"—" }}</td>
+                                <td class="muted">{{ case.submitted_by.lgu_municipality|default:"—" }}</td>
                                 <td class="muted">{{ case.get_status_display }}</td>
-                                <td class="muted">{% if case.assigned_at %}{{ case.assigned_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</td>
                                 <td class="row" style="gap:8px;">
                                     <button class="btn btn-link btn-sm" type="button" data-open-drawer="1" data-tracking="{{ case.tracking_id }}" data-mode="preview">Quick View</button>
                                     <button class="btn btn-link btn-sm" type="button" data-open-drawer="1" data-tracking="{{ case.tracking_id }}" data-mode="documents">Preview Docs</button>
@@ -312,36 +345,83 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                {% if page_obj.has_other_pages %}
+                    <div class="pagination">
+                        {% if page_obj.has_previous %}
+                            <a class="pagepill" href="?{% if filter_q %}q={{ filter_q|urlencode }}&{% endif %}{% if filter_status %}status={{ filter_status|urlencode }}&{% endif %}{% if filter_lgu %}lgu={{ filter_lgu|urlencode }}&{% endif %}{% if filter_case_type %}case_type={{ filter_case_type|urlencode }}&{% endif %}page={{ page_obj.previous_page_number }}">Prev</a>
+                        {% endif %}
+                        {% for n in page_obj.paginator.page_range %}
+                            {% if n == page_obj.number %}
+                                <span class="pagepill active">{{ n }}</span>
+                            {% elif n <= 10 %}
+                                <a class="pagepill" href="?{% if filter_q %}q={{ filter_q|urlencode }}&{% endif %}{% if filter_status %}status={{ filter_status|urlencode }}&{% endif %}{% if filter_lgu %}lgu={{ filter_lgu|urlencode }}&{% endif %}{% if filter_case_type %}case_type={{ filter_case_type|urlencode }}&{% endif %}page={{ n }}">{{ n }}</a>
+                            {% endif %}
+                        {% endfor %}
+                        {% if page_obj.has_next %}
+                            <a class="pagepill" href="?{% if filter_q %}q={{ filter_q|urlencode }}&{% endif %}{% if filter_status %}status={{ filter_status|urlencode }}&{% endif %}{% if filter_lgu %}lgu={{ filter_lgu|urlencode }}&{% endif %}{% if filter_case_type %}case_type={{ filter_case_type|urlencode }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+                        {% endif %}
+                    </div>
+                {% endif %}
             {% else %}
                 <div class="card__body"><p class="muted" style="margin:0;">No assigned transactions yet.</p></div>
             {% endif %}
         </div>
     </div>
 {% elif user.role == 'capitol_approver' %}
+    <div class="filters">
+        <form method="get" class="searchbar m-0">
+            <div class="grow">
+                <label for="id_q">Search</label>
+                <input id="id_q" name="q" value="{{ filter_q }}" placeholder="Search by Transaction No., Owner Name, LGU Origin, or Transaction Type" />
+            </div>
+            <div class="filters-row">
+                <div>
+                    <label for="id_lgu">LGU Origin</label>
+                    <select id="id_lgu" name="lgu">
+                        <option value="">All</option>
+                        {% for v,l in lgu_choices %}
+                            <option value="{{ v }}" {% if filter_lgu == v %}selected{% endif %}>{{ l }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="id_type">Request Type</label>
+                    <select id="id_type" name="case_type">
+                        <option value="">All</option>
+                        {% for v,l in case_type_choices %}
+                            <option value="{{ v }}" {% if filter_case_type == v %}selected{% endif %}>{{ l }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label>&nbsp;</label>
+                    <button class="btn btn-primary" type="submit">Apply</button>
+                </div>
+            </div>
+        </form>
+    </div>
     <div class="card card--flat card-elevated">
         <div class="card__header">
             <strong>For Approval</strong>
         </div>
         <div class="card__body card__body--flush">
-            {% if queue_cases %}
+            {% if page_obj and page_obj.object_list %}
                 <table class="table">
                     <thead>
                         <tr>
                             <th style="width:22%">Tracking No.</th>
                             <th style="width:10%">LGU Code</th>
                             <th>Owner</th>
-                            <th style="width:18%">Status</th>
                             <th style="width:20%">Updated</th>
                             <th style="width:14%">Action</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for case in queue_cases %}
+                        {% for case in page_obj.object_list %}
                             <tr>
                                 <td><strong><a href="{% url 'case_detail' case.tracking_id %}">{{ case.tracking_id }}</a></strong></td>
                                 <td class="muted">{{ case.lgu_area_code|default:"—" }}</td>
                                 <td>{{ case.client_display_name }}</td>
-                                <td class="muted">{{ case.get_status_display }}</td>
                                 <td class="muted">{{ case.updated_at|date:"M d, Y H:i" }}</td>
                                 <td class="row" style="gap:8px;">
                                     <button class="btn btn-link btn-sm" type="button" data-open-drawer="1" data-tracking="{{ case.tracking_id }}" data-mode="preview">Quick View</button>
@@ -352,6 +432,23 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                {% if page_obj.has_other_pages %}
+                    <div class="pagination">
+                        {% if page_obj.has_previous %}
+                            <a class="pagepill" href="?{% if filter_q %}q={{ filter_q|urlencode }}&{% endif %}{% if filter_lgu %}lgu={{ filter_lgu|urlencode }}&{% endif %}{% if filter_case_type %}case_type={{ filter_case_type|urlencode }}&{% endif %}page={{ page_obj.previous_page_number }}">Prev</a>
+                        {% endif %}
+                        {% for n in page_obj.paginator.page_range %}
+                            {% if n == page_obj.number %}
+                                <span class="pagepill active">{{ n }}</span>
+                            {% elif n <= 10 %}
+                                <a class="pagepill" href="?{% if filter_q %}q={{ filter_q|urlencode }}&{% endif %}{% if filter_lgu %}lgu={{ filter_lgu|urlencode }}&{% endif %}{% if filter_case_type %}case_type={{ filter_case_type|urlencode }}&{% endif %}page={{ n }}">{{ n }}</a>
+                            {% endif %}
+                        {% endfor %}
+                        {% if page_obj.has_next %}
+                            <a class="pagepill" href="?{% if filter_q %}q={{ filter_q|urlencode }}&{% endif %}{% if filter_lgu %}lgu={{ filter_lgu|urlencode }}&{% endif %}{% if filter_case_type %}case_type={{ filter_case_type|urlencode }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+                        {% endif %}
+                    </div>
+                {% endif %}
             {% else %}
                 <div class="card__body"><p class="muted" style="margin:0;">No transactions for approval.</p></div>
             {% endif %}
@@ -359,12 +456,44 @@
     </div>
 
 {% elif user.role == 'capitol_taxmapper' %}
+    <div class="filters">
+        <form method="get" class="searchbar m-0">
+            <div class="grow">
+                <label for="id_q">Search</label>
+                <input id="id_q" name="q" value="{{ filter_q }}" placeholder="Search by Transaction No., Owner Name, LGU Origin, or Transaction Type" />
+            </div>
+            <div class="filters-row">
+                <div>
+                    <label for="id_lgu">LGU Origin</label>
+                    <select id="id_lgu" name="lgu">
+                        <option value="">All</option>
+                        {% for v,l in lgu_choices %}
+                            <option value="{{ v }}" {% if filter_lgu == v %}selected{% endif %}>{{ l }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="id_type">Request Type</label>
+                    <select id="id_type" name="case_type">
+                        <option value="">All</option>
+                        {% for v,l in case_type_choices %}
+                            <option value="{{ v }}" {% if filter_case_type == v %}selected{% endif %}>{{ l }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label>&nbsp;</label>
+                    <button class="btn btn-primary" type="submit">Apply</button>
+                </div>
+            </div>
+        </form>
+    </div>
     <div class="card card--flat card-elevated">
         <div class="card__header">
             <strong>Tax Mapping Queue</strong>
         </div>
         <div class="card__body card__body--flush">
-            {% if queue_cases %}
+            {% if page_obj and page_obj.object_list %}
                 <table class="table">
                     <thead>
                         <tr>
@@ -376,7 +505,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for case in queue_cases %}
+                        {% for case in page_obj.object_list %}
                             <tr>
                                 <td><strong><a href="{% url 'case_detail' case.tracking_id %}">{{ case.tracking_id }}</a></strong></td>
                                 <td>{{ case.client_display_name }}</td>
@@ -391,6 +520,23 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                {% if page_obj.has_other_pages %}
+                    <div class="pagination">
+                        {% if page_obj.has_previous %}
+                            <a class="pagepill" href="?{% if filter_q %}q={{ filter_q|urlencode }}&{% endif %}{% if filter_lgu %}lgu={{ filter_lgu|urlencode }}&{% endif %}{% if filter_case_type %}case_type={{ filter_case_type|urlencode }}&{% endif %}page={{ page_obj.previous_page_number }}">Prev</a>
+                        {% endif %}
+                        {% for n in page_obj.paginator.page_range %}
+                            {% if n == page_obj.number %}
+                                <span class="pagepill active">{{ n }}</span>
+                            {% elif n <= 10 %}
+                                <a class="pagepill" href="?{% if filter_q %}q={{ filter_q|urlencode }}&{% endif %}{% if filter_lgu %}lgu={{ filter_lgu|urlencode }}&{% endif %}{% if filter_case_type %}case_type={{ filter_case_type|urlencode }}&{% endif %}page={{ n }}">{{ n }}</a>
+                            {% endif %}
+                        {% endfor %}
+                        {% if page_obj.has_next %}
+                            <a class="pagepill" href="?{% if filter_q %}q={{ filter_q|urlencode }}&{% endif %}{% if filter_lgu %}lgu={{ filter_lgu|urlencode }}&{% endif %}{% if filter_case_type %}case_type={{ filter_case_type|urlencode }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+                        {% endif %}
+                    </div>
+                {% endif %}
             {% else %}
                 <div class="card__body"><p class="muted" style="margin:0;">No transactions for tax mapping.</p></div>
             {% endif %}
@@ -404,32 +550,34 @@
             <span class="muted">Last used: <strong>{{ last_used_number|default:"—" }}</strong> · Suggested next: <strong>{{ suggested_next_number }}</strong></span>
         </div>
         <div class="card__body">
-            <form method="get" class="searchbar m-0">
-                <div class="grow">
-                    <label for="id_lgu">Location (LGU)</label>
-                    <select id="id_lgu" name="lgu">
-                        <option value="">All</option>
-                        {% for v,l in numberer_lgu_choices %}
-                            <option value="{{ v }}" {% if filter_lgu == v %}selected{% endif %}>{{ l }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label for="id_date_from">From</label>
-                    <input id="id_date_from" type="date" name="date_from" value="{{ filter_date_from }}" />
-                </div>
-                <div>
-                    <label for="id_date_to">To</label>
-                    <input id="id_date_to" type="date" name="date_to" value="{{ filter_date_to }}" />
-                </div>
-                <div class="grow">
-                    <label for="id_number">Number / Tracking</label>
-                    <input id="id_number" name="number" value="{{ filter_number }}" placeholder="Search..." />
-                </div>
-                <div>
-                    <button class="btn btn-primary" type="submit">Filter</button>
-                </div>
-            </form>
+            <div class="filters" style="margin:0;">
+                <form method="get" class="searchbar m-0">
+                    <div class="grow">
+                        <label for="id_lgu">Location (LGU)</label>
+                        <select id="id_lgu" name="lgu">
+                            <option value="">All</option>
+                            {% for v,l in numberer_lgu_choices %}
+                                <option value="{{ v }}" {% if filter_lgu == v %}selected{% endif %}>{{ l }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label for="id_date_from">From</label>
+                        <input id="id_date_from" type="date" name="date_from" value="{{ filter_date_from }}" />
+                    </div>
+                    <div>
+                        <label for="id_date_to">To</label>
+                        <input id="id_date_to" type="date" name="date_to" value="{{ filter_date_to }}" />
+                    </div>
+                    <div class="grow">
+                        <label for="id_number">Number / Tracking</label>
+                        <input id="id_number" name="number" value="{{ filter_number }}" placeholder="Search..." />
+                    </div>
+                    <div>
+                        <button class="btn btn-primary" type="submit">Filter</button>
+                    </div>
+                </form>
+            </div>
         </div>
         <div class="card__body card__body--flush">
             {% if queue_cases %}
@@ -466,12 +614,44 @@
     </div>
 
 {% elif user.role == 'capitol_releaser' %}
+    <div class="filters">
+        <form method="get" class="searchbar m-0">
+            <div class="grow">
+                <label for="id_q">Search</label>
+                <input id="id_q" name="q" value="{{ filter_q }}" placeholder="Search by Transaction No., Owner Name, LGU Origin, or Transaction Type" />
+            </div>
+            <div class="filters-row">
+                <div>
+                    <label for="id_lgu">LGU Origin</label>
+                    <select id="id_lgu" name="lgu">
+                        <option value="">All</option>
+                        {% for v,l in lgu_choices %}
+                            <option value="{{ v }}" {% if filter_lgu == v %}selected{% endif %}>{{ l }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="id_type">Request Type</label>
+                    <select id="id_type" name="case_type">
+                        <option value="">All</option>
+                        {% for v,l in case_type_choices %}
+                            <option value="{{ v }}" {% if filter_case_type == v %}selected{% endif %}>{{ l }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label>&nbsp;</label>
+                    <button class="btn btn-primary" type="submit">Apply</button>
+                </div>
+            </div>
+        </form>
+    </div>
     <div class="card card--flat card-elevated">
         <div class="card__header">
             <strong>For Release</strong>
         </div>
         <div class="card__body card__body--flush">
-            {% if queue_cases %}
+            {% if page_obj and page_obj.object_list %}
                 <table class="table">
                     <thead>
                         <tr>
@@ -483,7 +663,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for case in queue_cases %}
+                        {% for case in page_obj.object_list %}
                             <tr>
                                 <td><strong><a href="{% url 'case_detail' case.tracking_id %}">{{ case.tracking_id }}</a></strong></td>
                                 <td>{{ case.client_display_name }}</td>
@@ -498,6 +678,23 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                {% if page_obj.has_other_pages %}
+                    <div class="pagination">
+                        {% if page_obj.has_previous %}
+                            <a class="pagepill" href="?{% if filter_q %}q={{ filter_q|urlencode }}&{% endif %}{% if filter_lgu %}lgu={{ filter_lgu|urlencode }}&{% endif %}{% if filter_case_type %}case_type={{ filter_case_type|urlencode }}&{% endif %}page={{ page_obj.previous_page_number }}">Prev</a>
+                        {% endif %}
+                        {% for n in page_obj.paginator.page_range %}
+                            {% if n == page_obj.number %}
+                                <span class="pagepill active">{{ n }}</span>
+                            {% elif n <= 10 %}
+                                <a class="pagepill" href="?{% if filter_q %}q={{ filter_q|urlencode }}&{% endif %}{% if filter_lgu %}lgu={{ filter_lgu|urlencode }}&{% endif %}{% if filter_case_type %}case_type={{ filter_case_type|urlencode }}&{% endif %}page={{ n }}">{{ n }}</a>
+                            {% endif %}
+                        {% endfor %}
+                        {% if page_obj.has_next %}
+                            <a class="pagepill" href="?{% if filter_q %}q={{ filter_q|urlencode }}&{% endif %}{% if filter_lgu %}lgu={{ filter_lgu|urlencode }}&{% endif %}{% if filter_case_type %}case_type={{ filter_case_type|urlencode }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+                        {% endif %}
+                    </div>
+                {% endif %}
             {% else %}
                 <div class="card__body"><p class="muted" style="margin:0;">No transactions for release.</p></div>
             {% endif %}
@@ -526,6 +723,7 @@
     <div id="drawer-backdrop" class="drawer-backdrop" aria-hidden="true"></div>
     <aside id="drawer" class="drawer" aria-label="Transaction drawer" aria-hidden="true">
         <div class="drawer__top">
+            <button class="drawer__back" type="button" id="drawer-back" aria-label="Back">←</button>
             <span class="drawer__title" id="drawer-title">Transaction Preview</span>
             <button class="drawer__close" type="button" id="drawer-close" aria-label="Close">✕</button>
         </div>
@@ -542,6 +740,7 @@
         (function () {
             var drawer = document.getElementById('drawer');
             var backdrop = document.getElementById('drawer-backdrop');
+            var backBtn = document.getElementById('drawer-back');
             var closeBtn = document.getElementById('drawer-close');
             var content = document.getElementById('drawer-content');
             var title = document.getElementById('drawer-title');
@@ -601,6 +800,7 @@
                 t.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setTab(t.getAttribute('data-drawer-tab')); } });
             });
             if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
+            if (backBtn) backBtn.addEventListener('click', closeDrawer);
             backdrop.addEventListener('click', closeDrawer);
             document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDrawer(); });
         })();
