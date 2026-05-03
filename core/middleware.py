@@ -3,6 +3,7 @@ from django.contrib.auth import logout
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
+import traceback
 
 
 def _safe_add_message(request, level_func, text: str) -> None:
@@ -75,3 +76,20 @@ class ForcePasswordChangeMiddleware:
                 return redirect("set_password")
 
         return self.get_response(request)
+
+
+class ExceptionLoggingMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        try:
+            return self.get_response(request)
+        except Exception:
+            print("=== UNHANDLED EXCEPTION ===", flush=True)
+            try:
+                print(f"{request.method} {request.get_full_path()}", flush=True)
+            except Exception:
+                pass
+            print(traceback.format_exc(), flush=True)
+            raise

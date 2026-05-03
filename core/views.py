@@ -13,7 +13,7 @@ from django.contrib.auth.forms import SetPasswordForm
 from django.conf import settings
 from django import forms
 from django.core.paginator import Paginator
-from django.db import models, transaction
+from django.db import models, transaction, connection
 from django.db.models import Q, Count
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -144,6 +144,16 @@ def landing(request):
     if request.user.is_authenticated:
         return redirect("dashboard")
     return render(request, "core/landing.html")
+
+
+def healthz(request):
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("select 1")
+            row = cursor.fetchone()
+        return HttpResponse("ok" if (row and row[0] == 1) else "db_error", content_type="text/plain")
+    except Exception as e:
+        return HttpResponse(f"error: {type(e).__name__}: {e}", status=500, content_type="text/plain")
 
 
 def _public_status_label(case: Case) -> str:

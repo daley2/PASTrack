@@ -4,6 +4,7 @@ from . import views
 
 urlpatterns = [
     path("", views.landing, name="landing"),
+    path("healthz/", views.healthz, name="healthz"),
     # Module 4 (Public)
     path("track/", views.track_case, name="track_case"),
     path("track/<str:tracking_id>/", views.track_case_detail, name="track_case_detail"),
