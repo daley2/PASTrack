@@ -375,24 +375,21 @@
                 </header>
 
                 <main class="container {% block container_class %}{% endblock %}">
-                    {% if messages %}
-                        {% for msg in messages %}
-                            <div class="msg {{ msg.tags|default:'info' }}">{{ msg }}</div>
-                        {% endfor %}
-                    {% endif %}
-                    {% block content %}{% endblock %}
-                </main>
-            </div>
-        </div>
     {% else %}
         <main class="container {% block container_class_anon %}{% endblock %}">
-            {% if messages %}
-                {% for msg in messages %}
-                    <div class="msg {{ msg.tags|default:'info' }}">{{ msg }}</div>
-                {% endfor %}
-            {% endif %}
-            {% block content %}{% endblock %}
-        </main>
+    {% endif %}
+
+        {% if messages %}
+            {% for msg in messages %}
+                <div class="msg {{ msg.tags|default:'info' }}">{{ msg }}</div>
+            {% endfor %}
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+
+    {% if user.is_authenticated %}
+            </div>
+        </div>
     {% endif %}
 
     <script>
