@@ -167,6 +167,10 @@ INSTALLED_APPS = [
     # 'password_reset',
 ]
 
+SESSION_ENGINE = (_env("DJANGO_SESSION_ENGINE") or "").strip() or (
+    "django.contrib.sessions.backends.signed_cookies" if not DEBUG else "django.contrib.sessions.backends.db"
+)
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     'whitenoise.middleware.WhiteNoiseMiddleware',
